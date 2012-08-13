@@ -144,7 +144,8 @@ class Form {
   function fieldSQLValue($fieldName) {
     $field = $this->fields[$fieldName];
     if ($field) {
-    	// we know SQLValue returns the right thing if their is no value-ptw
+      // [2012-08012 ptw] we know SQLValue returns the right thing if there
+      // is no value
       return $field->SQLValue();
     }
   }
@@ -335,7 +336,7 @@ QUOTE;
   }
 
   function addErrorMessage($message) {
-  	array_push($this->errorMessages, $message);
+	array_push($this->errorMessages, $message);
   }
 }
 
@@ -476,7 +477,8 @@ class FormField {
   // name, to parse the value from
   function parseValue($source=NULL) {
     if ($source == NULL) { $source = $_POST; }
-    // TODO: Form should pass get/post
+    // This allows you to have a dynamic form -- we won't check
+    // fields that didn't get posted.
     if (! array_key_exists($this->name, $source)) {
       return true;
     }
@@ -660,7 +662,7 @@ QUOTE;
   // Creates an SQL assignment expression for entering this field
   // into a database.
   function SQLForm() {
-    return "{$this->id} = " . $this->SQLValue();
+    return "`{$this->id}` = " . $this->SQLValue();
   }
 
   // Heuristicates colon after label in TextForm
@@ -715,7 +717,7 @@ class EmailFormField extends FormField {
 
 
 ///
-// A FormField that is a number
+// A FormField that is a number in a certain range
 //
 class NumberFormField extends FormField {
   var $min;
