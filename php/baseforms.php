@@ -264,7 +264,7 @@ QUOTE;
     $fields = $section ? $this->sections[$section] : $this->fields;
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
-	if (! empty($sql)) { $sql .= ", "; }
+	if ($sql != "") { $sql .= ", "; }
 	$sql .= $field->SQLForm();
       }
     }
@@ -280,7 +280,7 @@ QUOTE;
     $fields = $section ? $this->sections[$section] : $this->fields;
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
-	if (! empty($sql)) { $sql .= ", "; }
+	if ($sql != "") { $sql .= ", "; }
 	$sql .= $field->SQLValue();
       }
     }
@@ -300,7 +300,7 @@ QUOTE;
       if ($field instanceof FormField &&
 	  ((! $brief) || $field->hasvalue())) {
 	// Neil wants double-spacing between fields
-	if (! empty($text)) { $text .= "\n\n"; }
+	if ($text != "") { $text .= "\n\n"; }
 	$text .= $field->TextForm($brief);
       }
     }
