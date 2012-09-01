@@ -173,7 +173,7 @@ QUOTE;
   <div class='errortext'>
 QUOTE;
       foreach ($this->errorMessages as $msg) {
-	$html .=
+        $html .=
 <<<QUOTE
 
     <p class="errortext">{$msg}</p>
@@ -224,11 +224,11 @@ QUOTE;
 QUOTE;
       }
       foreach ($fields as $field) {
-	if ($field instanceof FormField) {
-	  $html .= $field->HTMLTableRow($this->usedivs);
-	} else {
-	  $html .= $field;
-	}
+        if ($field instanceof FormField) {
+          $html .= $field->HTMLTableRow($this->usedivs);
+        } else {
+          $html .= $field;
+        }
       }
       $html .=
 <<<QUOTE
@@ -249,7 +249,7 @@ QUOTE;
     $fields = $section ? $this->sections[$section] : $this->fields;
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
-	$value |= $field->hasvalue();
+        $value |= $field->hasvalue();
       }
     }
     return $value;
@@ -264,8 +264,8 @@ QUOTE;
     $fields = $section ? $this->sections[$section] : $this->fields;
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
-	if ($sql != "") { $sql .= ", "; }
-	$sql .= $field->SQLForm();
+        if ($sql != "") { $sql .= ", "; }
+        $sql .= $field->SQLForm();
       }
     }
     return $sql;
@@ -280,8 +280,8 @@ QUOTE;
     $fields = $section ? $this->sections[$section] : $this->fields;
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
-	if ($sql != "") { $sql .= ", "; }
-	$sql .= $field->SQLValue();
+        if ($sql != "") { $sql .= ", "; }
+        $sql .= $field->SQLValue();
       }
     }
     return $sql;
@@ -298,10 +298,10 @@ QUOTE;
     $fields = $section ? $this->sections[$section] : $this->fields;
     foreach ($fields as $field) {
       if ($field instanceof FormField &&
-	  ((! $brief) || $field->hasvalue())) {
-	// Neil wants double-spacing between fields
-	if ($text != "") { $text .= "\n\n"; }
-	$text .= $field->TextForm($brief);
+          ((! $brief) || $field->hasvalue())) {
+        // Neil wants double-spacing between fields
+        if ($text != "") { $text .= "\n\n"; }
+        $text .= $field->TextForm($brief);
       }
     }
     return $text;
@@ -319,14 +319,14 @@ QUOTE;
     $errors = array();
     foreach ($this->fields as $field) {
       if ($field instanceof FormField) {
-	// Skip non-fields
-	if ($field->parseValue($source)) {
-	  // All good
-	} else {
-	  // Bzzt!
-	  $ok = false;
-	  array_push($errors, $field->errorMessage());
-	}
+        // Skip non-fields
+        if ($field->parseValue($source)) {
+          // All good
+        } else {
+          // Bzzt!
+          $ok = false;
+          array_push($errors, $field->errorMessage());
+        }
       }
     }
     if ($validate) {
@@ -336,7 +336,7 @@ QUOTE;
   }
 
   function addErrorMessage($message) {
-	array_push($this->errorMessages, $message);
+        array_push($this->errorMessages, $message);
   }
 }
 
@@ -457,14 +457,14 @@ class FormField {
     if (! isset($this->value)) {
       // If the posted value is valid, store it
       if ($this->isvalid($v)) {
-	$this->value = $this->canonical($v);
-	$this->valid = true;
+        $this->value = $this->canonical($v);
+        $this->valid = true;
       }
       // Otherwise, store the bogus value for error reporting
       // but mark it as not valid.
       else {
-	$this->value = $v;
-	$this->valid = false;
+        $this->value = $v;
+        $this->valid = false;
       }
     }
   }
@@ -513,9 +513,9 @@ class FormField {
     if ($this->hasvalue()) {
       // Don't quote numbers
       if (is_numeric($this->value)) {
-	return addslashes($this->value);
+        return addslashes($this->value);
       } else {
-	return "'" . addslashes($this->value) . "'";
+        return "'" . addslashes($this->value) . "'";
       }
     } else {
       return "DEFAULT";
@@ -572,10 +572,10 @@ class FormField {
     if (isset($this->value)) {
       $val = $this->HTMLValue();
       if (! $this->valid) {
-	$class = ' class="invalid"';
-	$onfocus =
+        $class = ' class="invalid"';
+        $onfocus =
 <<<QUOTE
-	  onfocus="this.className = '';"
+          onfocus="this.className = '';"
 QUOTE;
       }
     } else if (isset($this->default)) {
@@ -584,7 +584,7 @@ QUOTE;
       $class = ' class="hint"';
       $onfocus =
 <<<QUOTE
-	onfocus="this.className = ''; this.value = '';"
+        onfocus="this.className = ''; this.value = '';"
 QUOTE;
     } else {
       $val = '';
@@ -592,7 +592,7 @@ QUOTE;
     return
 <<<QUOTE
 
-	  <input{$class}{$onfocus} name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$val}">
+          <input{$class}{$onfocus} name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$val}">
 QUOTE;
   }
 
@@ -611,18 +611,18 @@ QUOTE;
 <<<QUOTE
 
       <{$tr} class="{$rowclass}">
-	<{$td} class="label">
+        <{$td} class="label">
 QUOTE;
     if (isset($this->description)) {
       $form .=
 <<<QUOTE
-	  <label for="{$this->id}">{$this->description}</label>{$req}
+          <label for="{$this->id}">{$this->description}</label>{$req}
 QUOTE;
     }
     $form .=
 <<<QUOTE
-	</{$td}>
-	<{$td} class="field">
+        </{$td}>
+        <{$td} class="field">
 QUOTE;
     $form .= $this->HTMLFormElement();
     if ($this->readonly) {
@@ -636,19 +636,19 @@ QUOTE;
     $form .=
 <<<QUOTE
 
-	</{$td}>
+        </{$td}>
 QUOTE;
     if (isset($this->annotation)) {
       $form .=
 <<<QUOTE
 
-	<{$td} class="annotation">{$this->annotation}</{$td}>
+        <{$td} class="annotation">{$this->annotation}</{$td}>
 QUOTE;
     } else {
       $form .=
 <<<QUOTE
 
-	<{$td} class="annotation"></{$td}>
+        <{$td} class="annotation"></{$td}>
 QUOTE;
     }
     $form .=
@@ -753,12 +753,13 @@ class NumberFormField extends FormField {
 
   function isvalid ($value) {
     if (($value == $this->default) ||
-	((! $this->required) && empty($value))) {
+        ((! $this->required) && empty($value))) {
       return (! $this->required);
     } else {
       return parent::isvalid($value) &&
-	($this->min ? ($value >= $this->min) : true) &&
-	($this->max ? ($value <= $this->max) : true);
+        is_numeric($value) &&
+        ($this->min ? ($value >= $this->min) : true) &&
+        ($this->max ? ($value <= $this->max) : true);
     }
   }
 
@@ -789,7 +790,7 @@ class NumberFormField extends FormField {
 // Abstract FormField that matches a pattern
 //
 abstract class PatternFormField extends FormField {
-  // The pattern that you have to match
+  // The pattern that you have to match 
   var $pattern;
 
   function PatternFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
@@ -798,11 +799,11 @@ abstract class PatternFormField extends FormField {
 
   function isvalid ($value) {
     if (($value == $this->default) ||
-	((! $this->required) && empty($value))) {
+        ((! $this->required) && empty($value))) {
       return (! $this->required);
     } else {
       return parent::isvalid($value) &&
-	preg_match($this->pattern,   $value);
+        preg_match($this->pattern,   $value);
     }
   }
 
@@ -901,7 +902,7 @@ class PhoneFormField extends PatternFormField {
 
   function isvalid ($value) {
     if (($value == $this->default) ||
-	((! $this->required) && empty($value))) {
+        ((! $this->required) && empty($value))) {
       return (! $this->required);
     } else {
       return parent::isvalid($value);
@@ -910,7 +911,7 @@ class PhoneFormField extends PatternFormField {
 
   function canonical ($value) {
     if ((! $this->required) &&
-	(($value == $this->default) || empty($value))) {
+        (($value == $this->default) || empty($value))) {
       unset($value);
       return $value;
     }
@@ -942,7 +943,7 @@ class DateFormField extends PatternFormField {
 
   function isvalid ($value) {
     if (($value == $this->default) ||
-	((! $this->required) && empty($value))) {
+        ((! $this->required) && empty($value))) {
       return (! $this->required);
     } else {
       return parent::isvalid($value);
@@ -951,7 +952,7 @@ class DateFormField extends PatternFormField {
 
   function canonical ($value) {
     if ((! $this->required) &&
-	(($value == $this->default) || empty($value))) {
+        (($value == $this->default) || empty($value))) {
       unset($value);
       return $value;
     }
@@ -1017,7 +1018,7 @@ class DaytimeFormField extends PatternFormField {
 
   function isvalid ($value) {
     if (($value == $this->default) ||
-	((! $this->required) && empty($value))) {
+        ((! $this->required) && empty($value))) {
       return (! $this->required);
     } else {
       return parent::isvalid($value);
@@ -1026,7 +1027,7 @@ class DaytimeFormField extends PatternFormField {
 
   function canonical ($value) {
     if ((! $this->required) &&
-	(($value == $this->default) || empty($value))) {
+        (($value == $this->default) || empty($value))) {
       unset($value);
       return $value;
     }
@@ -1037,12 +1038,12 @@ class DaytimeFormField extends PatternFormField {
     if ($matches[1] < 12) {
       $matches[3] = 'a';
       if ($matches[3] == 0) {
-	$matches[3] = '12';
+        $matches[3] = '12';
       }
     } else if ($matches[1] >= 12) {
       $matches[3] = 'p';
       if ($matches[3] > 12) {
-	$matches[3] -= 12;
+        $matches[3] -= 12;
       }
     }
 
@@ -1207,9 +1208,9 @@ class ChoiceFormField extends FormField {
     if ($this->hasvalue()) {
       $choice = $this->choices[$this->value];
       if ($choice instanceof ChoiceItem) {
-	return $choice->HTMLValue();
+        return $choice->HTMLValue();
       } else {
-	return htmlspecialchars($choice, ENT_QUOTES);
+        return htmlspecialchars($choice, ENT_QUOTES);
       }
     } else {
       return "";
@@ -1220,9 +1221,9 @@ class ChoiceFormField extends FormField {
     if ($this->hasvalue()) {
       $choice = $this->choices[$this->value];
       if ($choice instanceof ChoiceItem) {
-	return "'" . $choice->SQLValue() . "'";
+        return "'" . $choice->SQLValue() . "'";
       } else {
-	return "'" . addslashes($choice) . "'";
+        return "'" . addslashes($choice) . "'";
       }
     } else {
       return "DEFAULT";
@@ -1233,9 +1234,9 @@ class ChoiceFormField extends FormField {
     if ($this->hasvalue()) {
       $choice = $this->choices[$this->value];
       if ($choice instanceof ChoiceItem) {
-	return $choice->TextValue();
+        return $choice->TextValue();
       } else {
-	return $choice;
+        return $choice;
       }
     } else {
       return "";
@@ -1269,17 +1270,17 @@ QUOTE;
       $selected = ($this->value === $key) ? " checked" : "";
       if ($selected) { $this->hasselection = true; }
       if ($value instanceof ChoiceItem) {
-	$desc = $value->description();
+        $desc = $value->description();
       } else {
-	$desc = htmlspecialchars($value, ENT_QUOTES);
+        $desc = htmlspecialchars($value, ENT_QUOTES);
       }
       $element .=
 <<<QUOTE
 
-	<label for="{$this->id}">
-	  <input name="{$this->input}" type="{$this->type}" class="{$this->type}" value="{$key}"{$selected}{$additional}>
-	  <span>{$desc}</span>
-	</label>
+        <label for="{$this->id}">
+          <input name="{$this->input}" type="{$this->type}" class="{$this->type}" value="{$key}"{$selected}{$additional}>
+          <span>{$desc}</span>
+        </label>
 QUOTE;
     }
     // Ensure this field will be posted
@@ -1287,7 +1288,7 @@ QUOTE;
       $element .=
 <<<QUOTE
 
-	<input style="display: none" type="radio" name="{$this->input}" value="not_bloody_likely" checked>
+        <input style="display: none" type="radio" name="{$this->input}" value="not_bloody_likely" checked>
 QUOTE;
     }
     $element .=
@@ -1353,10 +1354,10 @@ class MultipleChoiceFormField extends ChoiceFormField {
     // value
     if (isset($keyarray)) {
       foreach ($keyarray as $key) {
-	if (! array_key_exists($key, $this->choices)) {
-	  return false;
-	}
-	$valid = true;
+        if (! array_key_exists($key, $this->choices)) {
+          return false;
+        }
+        $valid = true;
       }
     }
     return $valid;
@@ -1384,11 +1385,11 @@ class MultipleChoiceFormField extends ChoiceFormField {
     if ($this->hasvalue()) {
       $html = array();
       foreach ($this->choice() as $choice) {
-	if ($choice instanceof ChoiceItem) {
-	  $html[] = $choice->HTMLValue();
-	} else {
-	  $html[] = htmlspecialchars($choice, ENT_QUOTES);
-	}
+        if ($choice instanceof ChoiceItem) {
+          $html[] = $choice->HTMLValue();
+        } else {
+          $html[] = htmlspecialchars($choice, ENT_QUOTES);
+        }
       }
       return join(",", $html);
     } else {
@@ -1400,11 +1401,11 @@ class MultipleChoiceFormField extends ChoiceFormField {
     if ($this->hasvalue()) {
       $sql = array();
       foreach ($this->choice() as $choice) {
-	if ($choice instanceof ChoiceItem) {
-	  $sql[] = $choice->SQLValue();
-	} else {
-	  $sql[] = addslashes($choice);
-	}
+        if ($choice instanceof ChoiceItem) {
+          $sql[] = $choice->SQLValue();
+        } else {
+          $sql[] = addslashes($choice);
+        }
       }
       return "'" . join(",", $sql) . "'";
     } else {
@@ -1416,11 +1417,11 @@ class MultipleChoiceFormField extends ChoiceFormField {
     if ($this->hasvalue()) {
       $text = array();
       foreach ($this->choice() as $choice) {
-	if ($choice instanceof ChoiceItem) {
-	  $text[] = $choice->TextValue();
-	} else {
-	  $text[] = $choice;
-	}
+        if ($choice instanceof ChoiceItem) {
+          $text[] = $choice->TextValue();
+        } else {
+          $text[] = $choice;
+        }
       }
       // Neil wants these separated by newlines in text
       return "\t" . join("\n\t", $text);
@@ -1462,17 +1463,17 @@ QUOTE;
     foreach ($this->choices as $key => $value) {
       $selected = ($this->value && in_array($key, $this->value)) ? " checked" : "";
       if ($value instanceof ChoiceItem) {
-	$desc = $value->description();
+        $desc = $value->description();
       } else {
-	$desc = htmlspecialchars($value, ENT_QUOTES);
+        $desc = htmlspecialchars($value, ENT_QUOTES);
       }
       $element .=
 <<<QUOTE
 
-	<label for="{$this->id}">
-	  <input name="{$this->input}[]" type="checkbox" class="checkbox" value="{$key}"{$selected}>
-	  <span>{$desc}</span>
-	</label>
+        <label for="{$this->id}">
+          <input name="{$this->input}[]" type="checkbox" class="checkbox" value="{$key}"{$selected}>
+          <span>{$desc}</span>
+        </label>
 QUOTE;
     }
     $element .=
@@ -1504,19 +1505,19 @@ class MenuFormField extends ChoiceFormField {
 <<<QUOTE
 
       <select name="{$this->input}" id="{$this->id}"{$additional}>
-	<option>Select {$this->description}</option>
+        <option>Select {$this->description}</option>
 QUOTE;
     foreach ($this->choices as $key => $value) {
       $selected = ($this->value === $key) ? " selected" : "";
       if ($value instanceof ChoiceItem) {
-	$desc = $value->description();
+        $desc = $value->description();
       } else {
-	$desc = htmlspecialchars($value, ENT_QUOTES);
+        $desc = htmlspecialchars($value, ENT_QUOTES);
       }
       $element .=
 <<<QUOTE
 
-	<option value="{$key}"{$selected}>{$desc}</option>
+        <option value="{$key}"{$selected}>{$desc}</option>
 QUOTE;
     }
     $element .=
@@ -1607,23 +1608,23 @@ class MenuItemFormField extends MenuFormField {
 <<<QUOTE
 
       <select name="{$this->input}" id="{$this->id}">
-	<option>Select {$this->description}</option>
+        <option>Select {$this->description}</option>
 QUOTE;
     foreach ($this->choices as $key => $value) {
       if ($value instanceof MenuItem) {
-	$selected = ($this->value === $key) ? " selected" : "";
-	$desc = $value->HTMLValue();
-	$element .=
+        $selected = ($this->value === $key) ? " selected" : "";
+        $desc = $value->HTMLValue();
+        $element .=
 <<<QUOTE
 
-	<option value="{$key}"{$selected}>&nbsp;&nbsp;{$desc}</option>
+        <option value="{$key}"{$selected}>&nbsp;&nbsp;{$desc}</option>
 QUOTE;
       } else {
-	$desc = htmlspecialchars($value, ENT_QUOTES);
-	$element .=
+        $desc = htmlspecialchars($value, ENT_QUOTES);
+        $element .=
 <<<QUOTE
 
-	<option>{$desc}</option>
+        <option>{$desc}</option>
 QUOTE;
       }
     }
