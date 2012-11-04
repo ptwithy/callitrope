@@ -40,6 +40,11 @@ $html5 = preg_match("/webkit|presto/i", $_SERVER['HTTP_USER_AGENT']);
 // Some stuff only looks good on mobile
 $mobile = preg_match("/ipad|iphone/i",  $_SERVER['HTTP_USER_AGENT']);
 
+// Have I told you how much PHP sucks?  Apparently you cannot
+// define anonymous inner functions?  WTF?
+function is_field ($f) { return $f instanceof FormField; };
+function order ($a, $b) { return $a->priority - $b->priority; };
+
 ///
 // The basic form object
 //
@@ -264,8 +269,11 @@ QUOTE;
     $fields = $section ? $this->sections[$section] : $this->fields;
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
-        if ($sql != "") { $sql .= ", "; }
-        $sql .= $field->SQLForm();
+        $form = $field->SQLForm();
+        if ($form !== null) {
+          if ($sql != "") { $sql .= ", "; }
+          $sql .= $form;
+        }
       }
     }
     return $sql;
@@ -280,8 +288,11 @@ QUOTE;
     $fields = $section ? $this->sections[$section] : $this->fields;
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
-        if ($sql != "") { $sql .= ", "; }
-        $sql .= $field->SQLValue();
+        $value = $field->SQLValue();
+        if ($value !== null) {
+          if ($sql != "") { $sql .= ", "; }
+          $sql .= $value;
+        }
       }
     }
     return $sql;
@@ -317,16 +328,22 @@ QUOTE;
     if ($source == NULL) { $source = $_POST; }
     $ok = true;
     $errors = array();
-    foreach ($this->fields as $field) {
-      if ($field instanceof FormField) {
-        // Skip non-fields
-        if ($field->parseValue($source)) {
-          // All good
-        } else {
-          // Bzzt!
-          $ok = false;
-          array_push($errors, $field->errorMessage());
-        }
+    // See "PHP sucks" above
+    $fields = array_filter($this->fields, 'is_field');
+    // Here, PHP double sucks.  Why would this function not just return
+    // the f-ing sorted array?!?!?
+    usort($fields, 'order');
+    $current = $fields[0]->priority;
+    foreach ($fields as $field) {
+      // Stop if there are errors and you hit a new priority level
+      if ((! $ok) && ($field->priority != $current)) { break; }
+      $current = $field->priority;
+      if ($field->parseValue($source)) {
+        // All good
+      } else {
+        // Bzzt!
+        $ok = false;
+        array_push($errors, $field->errorMessage());
       }
     }
     if ($validate) {
@@ -393,6 +410,8 @@ class FormField {
   var $id;
   // Input name
   var $input;
+  // Parse priority
+  var $priority = 0;
 
   // Create a form field.  Arguments are:
   // @param name:String The name of the field
@@ -401,7 +420,11 @@ class FormField {
   // required
   // @param annotation:String (optional) Additional description that
   // will appear to the right of the form
-  function FormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
+  // @param instance:Number (optional) An index number for multiple
+  // occurences of the same field
+  // @param priority:Number (optional) A priority for checking validity
+  // higher values are checked first
+  function FormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0) {
     $this->name = $name;
     $this->description = $description;
     $this->type = "text";
@@ -414,6 +437,7 @@ class FormField {
     $this->id = "{$name}{$instance}";
     $multiple = is_null($this->instance) ? '' : '[]';
     $this->input = "{$name}{$multiple}";
+    $this->priority = $priority;
   }
 
   function setAnnotation($annotation) {
