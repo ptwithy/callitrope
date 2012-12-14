@@ -38,7 +38,7 @@ include_once("subroutines.php");
 // Webkit = Safari, Chrome; Presto = Opera
 $html5 = preg_match("/webkit|presto/i", $_SERVER['HTTP_USER_AGENT']);
 // Some stuff only looks good on mobile
-$mobile = preg_match("/ipad|iphone/i",  $_SERVER['HTTP_USER_AGENT']);
+$mobile = preg_match("/ipad|iphone|android/i",  $_SERVER['HTTP_USER_AGENT']);
 
 // Have I told you how much PHP sucks?  Apparently you cannot
 // define anonymous inner functions?  WTF?
@@ -886,7 +886,8 @@ class ZIPFormField extends PatternFormField {
     // Override the default
     $this->maxlength = 10;
     $this->pattern = "/^([0-9]{5,5})-?([0-9]{4,4})?$/";
-    $this->type = $mobile ? "number" : "text";
+    // [2012-12-12 ptw] Mobile Webkit inserts commas if you use 'number'
+    $this->type = $mobile ? "tel" : "text";
     $this->title = "ZIP code";
     $this->placeholder = '01234-5678';
   }
