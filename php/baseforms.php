@@ -149,7 +149,7 @@ class Form {
   function fieldSQLValue($fieldName) {
     $field = $this->fields[$fieldName];
     if ($field) {
-      // [2012-08012 ptw] we know SQLValue returns the right thing if there
+      // [2012-08-12 ptw] we know SQLValue returns the right thing if there
       // is no value
       return $field->SQLValue();
     }
