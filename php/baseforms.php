@@ -1034,9 +1034,10 @@ class DaytimeFormField extends PatternFormField {
     global $html5;
     parent::PatternFormField($name, $description, $optional, $annotation, $instance);
     // Override the default
-    $this->type = $html5 ? "time" : "text";
+// This sucks on Safari 5, only Opera has a useful implementation
+//    $this->type = $html5 ? "time" : "text";
     $this->maxlength = 8;
-    $this->pattern = "/^([0-2]?[0-9])\:?(([0-6][0-9])?)\s*([apAP]?)[mM]?$/";
+    $this->pattern = "/^([0-2]?[0-9])\:?((?:[0-6][0-9])?)\s*([apAP]?)[mM]?$/";
     $this->title = "time";
     $this->placeholder = date("g:i a");
   }
@@ -1060,19 +1061,21 @@ class DaytimeFormField extends PatternFormField {
     $matches = array();
     preg_match($this->pattern, $value, $matches);
     if (! $matches[2]) { $matches[2] = '00'; }
-    if ($matches[1] < 12) {
-      $matches[3] = 'a';
-      if ($matches[3] == 0) {
-        $matches[3] = '12';
-      }
-    } else if ($matches[1] >= 12) {
-      $matches[3] = 'p';
-      if ($matches[3] > 12) {
-        $matches[3] -= 12;
+    if (! $matches[3]) {
+      if ($matches[1] < 12) {
+        $matches[3] = 'a';
+        if ($matches[1] == 0) {
+          $matches[1] = '12';
+        }
+      } else if ($matches[1] >= 12) {
+        $matches[3] = 'p';
+        if ($matches[1] > 12) {
+          $matches[1] -= 12;
+        }
       }
     }
 
-    return $matches[1] . ":" . $matches[2] . " " . $matches[3] . 'm';
+    return $matches[1] . ":" . $matches[2] . " " . strtolower($matches[3] . 'm');
   }
 
   // Output 24-hour SQL time
