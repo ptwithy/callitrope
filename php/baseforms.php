@@ -1039,7 +1039,7 @@ class BirthdateFormField extends DateFormField {
     // Override the default
     $this->title = "birth date";
     // Require 4-digit year
-    $this->$LocalPattern = "/^([01]?[0-9])[-\/ ]([0-3]?[0-9])[-\/ ]((?:[0-9]{2,2})?[0-9]{4,4})$/";
+    $this->LocalPattern = "/^([01]?[0-9])[-\/ ]([0-3]?[0-9])[-\/ ]((?:[0-9]{2,2})?[0-9]{4,4})$/";
     $this->placeholder = $this->ISO ? date("Y-m-d") : date("m/d/Y");
   }
 }
@@ -1088,7 +1088,8 @@ class DaytimeFormField extends PatternFormField {
         return $this->ISOValue();
       } else {
         $h = $this->hour;
-        return "" . (($h % 12) ?: 12) . ":" . number_pad($this->minute, 2) . ($h < 12 ? " am" : " pm");
+        // Not sure when ?: introduced to php
+        return "" . (($h % 12) ? ($h % 12) : 12) . ":" . number_pad($this->minute, 2) . ($h < 12 ? " am" : " pm");
       }
     } else {
       return $this->value;
@@ -1107,7 +1108,8 @@ class DaytimeFormField extends PatternFormField {
       $this->minute = 1 * $matches[2];
     } else if (preg_match($this->LocalPattern, $value, $matches)) {
       $this->hour = 1 * $matches[1];
-      $this->minute = 1 * ($matches[2] ?: 0);
+      // Not sure when ?: introduced to php
+      $this->minute = 1 * ($matches[2] ? $matches[2] : 0);
       $meridian = $matches[3];
       if ($meridian) {
         $this->hour = $this->hour % 12;
