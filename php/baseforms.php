@@ -453,6 +453,7 @@ class FormField {
     return $this->valid && isset($this->value);
   }
 
+  // Effectively the presentation, where the value is the representation
   function choice() {
     return $this->value;
   }
@@ -476,20 +477,24 @@ class FormField {
     return $value;
   }
 
-  // Set a default (initial) value
+  function setValue($v) {
+    // If the value is valid, store it
+    if ($this->isvalid($v)) {
+      $this->value = $this->canonical($v);
+      $this->valid = true;
+    }
+    // Otherwise, store the bogus value for error reporting
+    // but mark it as not valid.
+    else {
+      $this->value = $v;
+      $this->valid = false;
+    }
+  }
+
+  // Set a default (initial) value (if no value is set)
   function initialValue($v) {
     if (! isset($this->value)) {
-      // If the posted value is valid, store it
-      if ($this->isvalid($v)) {
-        $this->value = $this->canonical($v);
-        $this->valid = true;
-      }
-      // Otherwise, store the bogus value for error reporting
-      // but mark it as not valid.
-      else {
-        $this->value = $v;
-        $this->valid = false;
-      }
+      $this->setValue($v);
     }
   }
 
@@ -511,16 +516,7 @@ class FormField {
       $v = $v[$this->instance];
     }
     // If the posted value is valid, store it
-    if ($this->isvalid($v)) {
-      $this->value = $this->canonical($v);
-      $this->valid = true;
-    }
-    // Otherwise, store the bogus value for error reporting
-    // but mark it as not valid.
-    else {
-      $this->value = $v;
-      $this->valid = false;
-    }
+    $this->setValue($v);
     return $this->valid;
   }
 
@@ -528,18 +524,20 @@ class FormField {
   // Can return an invalid value (for error reporting).  If you must
   // have a valid value, test $this->valid first.
   function HTMLValue() {
-    return htmlspecialchars($this->value, ENT_QUOTES);
+    return htmlspecialchars($this->choice(), ENT_QUOTES);
   }
 
   // Returns the value in a format that is safe to insert into SQL.
   // If the field does not have a valid value, returns DEFAULT.
   function SQLValue() {
     if ($this->hasvalue()) {
+      // NOT choice -- SQL Stores representation
+      $val = $this->value;
       // Don't quote numbers
-      if (is_numeric($this->value)) {
-        return addslashes($this->value);
+      if (is_numeric($val)) {
+        return addslashes($val);
       } else {
-        return "'" . addslashes($this->value) . "'";
+        return "'" . addslashes($val) . "'";
       }
     } else {
       return "DEFAULT";
@@ -550,7 +548,7 @@ class FormField {
   // are return as the empty string.  Quotes in the string are escaped.
   function TextValue() {
     if ($this->hasvalue()) {
-      return $this->value;
+      return $this->choice();
     } else {
       return "";
     }
@@ -950,20 +948,29 @@ class PhoneFormField extends PatternFormField {
 ///
 // A FormField that is a date
 //
-// Allows a 2-digit year, defaults to the current century
+// Allows a 2-digit year if non-ISO mode, defaults to the current century
+//
+// Heuristicates input/ouput format, stores in ISO format
 //
 class DateFormField extends PatternFormField {
+  var $ISO;
+  var $ISOPattern = "/^([0-9]{4,4})-([0-1]?[0-9])-([0-3]?[0-9])$/";
+  var $LocalPattern = "/^([01]?[0-9])[-\/ ]([0-3]?[0-9])[-\/ ]((?:[0-9]{2,2})?[0-9]{2,2})$/";
+  var $year;
+  var $month;
+  var $day;
 
   function DateFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
-    global $html5;
+    global $mobile;
+    $this->ISO = $mobile;
     parent::PatternFormField($name, $description, $optional, $annotation, $instance);
     // Override the default
-// This sucks on Safari 5, only Opera has a useful implementation
-//    $this->type = $html5 ? "date" : "text";
+    $this->type = $this->ISO ? "date" : "text";
     $this->maxlength = 16;
-    $this->pattern = "/^([01]?[0-9])[-\/ ]([0-3]?[0-9])[-\/ ](([0-9]{2,2})?[0-9]{2,2})$/";
+    // We want ISO format always, heuristicate Local if necessary
+    $this->pattern = $this->ISOPattern;
     $this->title = "date";
-    $this->placeholder = date("m/d/y");
+    $this->placeholder = $this->ISO ? date("Y-m-d") : date("m/d/y");
   }
 
   function isvalid ($value) {
@@ -971,10 +978,26 @@ class DateFormField extends PatternFormField {
         ((! $this->required) && empty($value))) {
       return (! $this->required);
     } else {
-      return parent::isvalid($value);
+      return preg_match($this->ISOPattern, $value) || preg_match($this->LocalPattern, $value);
     }
   }
 
+  function ISOValue () {
+    return ("" . $this->year . "-" . number_pad($this->month, 2) . "-" . number_pad($this->day, 2));
+  }
+  
+  function choice () {
+    if ($this->valid) {
+      if ($this->ISO) {
+        return $this->ISOValue();
+      } else {
+        return ("" . $this->month . "/" . $this->day . "/" . $this->year);
+      }
+    } else {
+      return $this->value;
+    }
+  }
+  
   function canonical ($value) {
     if ((! $this->required) &&
         (($value == $this->default) || empty($value))) {
@@ -982,27 +1005,25 @@ class DateFormField extends PatternFormField {
       return $value;
     }
     $value = parent::canonical($value);
-    $matches = array();
-    preg_match($this->pattern, $value, $matches);
-    $year = 1 * $matches[3];
-    if ($year < 100) {
-      $date = getdate();
-      $century = floor(($date['year']) / 100);
-      $year = $century * 100 + $year;
-    }
-    return $matches[1] . "/" . $matches[2] . "/" . $year;
-  }
-
-  // SQL wants a date in YYYY-MM-DD format, but we accept it in
-  //  MM/DD/YYY format
-  function SQLValue() {
-    if ($this->hasvalue()) {
-      $matches = array();
-      preg_match($this->pattern, $this->value, $matches);
-      return "'" . $matches[3] . "-" . $matches[1] . "-" . $matches[2] . "'";
+    if (preg_match($this->ISOPattern, $value, $matches)) {
+      $this->year = 1 * $matches[1];
+      $this->month = 1 * $matches[2];
+      $this->day = 1 * $matches[3];
+    } else if (preg_match($this->LocalPattern, $value, $matches)) {
+      $this->year = 1 * $matches[3];
+      $this->month = 1 * $matches[1];
+      $this->day = 1 * $matches[2];
+      if ($year < 100) {
+        $date = getdate();
+        $century = floor(($date['year']) / 100);
+        $this->year = $century * 100 + $this->year;
+      }
     } else {
-      return "DEFAULT";
+      // Because we are called by isvalid
+      return $value;
     }
+    // Not choice because we don't know if it is valid yet.
+    return $this->ISOValue();
   }
 }
 
@@ -1016,10 +1037,10 @@ class BirthdateFormField extends DateFormField {
   function BirthdateFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
     parent::DateFormField($name, $description, $optional, $annotation, $instance);
     // Override the default
-    $this->maxlength = 16;
-    $this->pattern = "/^([01]?[0-9])[-\/ ]([0-3]?[0-9])[-\/ ]([0-9]{4,4})$/";
     $this->title = "birth date";
-    $this->placeholder = date("m/d/Y");
+    // Require 4-digit year
+    $this->$LocalPattern = "/^([01]?[0-9])[-\/ ]([0-3]?[0-9])[-\/ ]((?:[0-9]{2,2})?[0-9]{4,4})$/";
+    $this->placeholder = $this->ISO ? date("Y-m-d") : date("m/d/Y");
   }
 }
 
@@ -1029,17 +1050,22 @@ class BirthdateFormField extends DateFormField {
 // Allows a free-form format, either 24-hour or 12-hour + am/pm
 //
 class DaytimeFormField extends PatternFormField {
-
+  var $ISO;
+  var $ISOPattern = "/^([0-2][0-9])\:([0-6][0-9])$/";
+  var $LocalPattern = "/^([0-2]?[0-9])\:?((?:[0-6][0-9])?)\s*([apAP]?)[mM]?$/";
+  var $hour;
+  var $minute;
+  
   function DaytimeFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
-    global $html5;
+    global $mobile;
+    $this->ISO = $mobile;
     parent::PatternFormField($name, $description, $optional, $annotation, $instance);
     // Override the default
-// This sucks on Safari 5, only Opera has a useful implementation
-//    $this->type = $html5 ? "time" : "text";
+    $this->type = $this->ISO ? "time" : "text";
     $this->maxlength = 8;
-    $this->pattern = "/^([0-2]?[0-9])\:?((?:[0-6][0-9])?)\s*([apAP]?)[mM]?$/";
+    $this->pattern = $this->ISO ? $this->ISOPattern : $this->LocalPattern;
     $this->title = "time";
-    $this->placeholder = date("g:i a");
+    $this->placeholder = $this->ISO ? date("H:i") : date("g:i a");
   }
 
   function isvalid ($value) {
@@ -1047,7 +1073,25 @@ class DaytimeFormField extends PatternFormField {
         ((! $this->required) && empty($value))) {
       return (! $this->required);
     } else {
-      return parent::isvalid($value);
+      // We want ISO format always, heuristicate Local if necessary
+      return preg_match($this->ISOPattern, $value) || preg_match($this->LocalPattern, $value);
+    }
+  }
+  
+  function ISOValue() {
+    return ("" . number_pad($this->hour, 2) . ":" . number_pad($this->minute, 2));
+  }
+
+  function choice () {
+    if ($this->valid) {
+      if ($this->ISO) {
+        return $this->ISOValue();
+      } else {
+        $h = $this->hour;
+        return "" . (($h % 12) ?: 12) . ":" . number_pad($this->minute, 2) . ($h < 12 ? " am" : " pm");
+      }
+    } else {
+      return $this->value;
     }
   }
 
@@ -1058,33 +1102,25 @@ class DaytimeFormField extends PatternFormField {
       return $value;
     }
     $value = parent::canonical($value);
-    $matches = array();
-    preg_match($this->pattern, $value, $matches);
-    if (! $matches[2]) { $matches[2] = '00'; }
-    if (! $matches[3]) {
-      if ($matches[1] < 12) {
-        $matches[3] = 'a';
-        if ($matches[1] == 0) {
-          $matches[1] = '12';
-        }
-      } else if ($matches[1] >= 12) {
-        $matches[3] = 'p';
-        if ($matches[1] > 12) {
-          $matches[1] -= 12;
+    if (preg_match($this->ISOPattern, $value, $matches)) {
+      $this->hour = 1 * $matches[1];
+      $this->minute = 1 * $matches[2];
+    } else if (preg_match($this->LocalPattern, $value, $matches)) {
+      $this->hour = 1 * $matches[1];
+      $this->minute = 1 * ($matches[2] ?: 0);
+      $meridian = $matches[3];
+      if ($meridian) {
+        $this->hour = $this->hour % 12;
+        if (strtolower($meridian) == 'p') {
+          $this->hour = $this->hour + 12;
         }
       }
-    }
-
-    return $matches[1] . ":" . $matches[2] . " " . strtolower($matches[3] . 'm');
-  }
-
-  // Output 24-hour SQL time
-  function SQLValue() {
-    if ($this->hasvalue()) {
-      return "'" . normalize_time($this->choice()) . "'";
     } else {
-      return "DEFAULT";
+      // Because we are called by isvalid
+      return $value;
     }
+
+    return $this->ISOValue();
   }
 }
 

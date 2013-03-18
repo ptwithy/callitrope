@@ -334,6 +334,12 @@ function columns_of_table($db, $table) {
 }
 
 ///
+// Pad a number with 0's on the left
+function number_pad($number,$n) {
+  return str_pad((int) $number, $n, "0", STR_PAD_LEFT);
+}
+
+///
 // Converts a time with AM/PM to 24 hour time
 function normalize_time($time) {
     if (empty($time)) { return $time; }
@@ -342,8 +348,10 @@ function normalize_time($time) {
         if (! $regs[2]) {
             $regs[2] = 0;
         }
+        // 12am == 00:00, 12pm == 12:00
+        $regs[1] = $regs[1] % 12;
         if ($regs[3] == 'p' || $regs[3] == 'P') {
-            $regs[1] = $regs[1] % 12 + 12;
+            $regs[1] = $regs[1] + 12;
         }
         return "{$regs[1]}:{$regs[2]}";
     }
