@@ -535,7 +535,11 @@ class FormField {
       $val = $this->value;
       // Don't quote numbers
       if (is_numeric($val)) {
-        return addslashes($val);
+        if (intval($val) == $val) {
+          return intval($val);
+        } else {
+          return floatval($val);
+        }
       } else {
         return "'" . addslashes($val) . "'";
       }
@@ -1185,7 +1189,7 @@ class ChoiceItem {
   }
 
   function SQLValue() {
-    return addslashes($this->name);
+    return "'" . addslashes($this->name) . "'";
   }
 
   function TextValue() {

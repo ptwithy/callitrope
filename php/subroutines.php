@@ -127,6 +127,25 @@ function clean($str) {
 	return h2s(trim($str));
 }
 
+///
+// Convert a value to a normalized SQL value
+//
+// Tries to sort floats and ints from strings
+// Does not handle boolean or other values
+function cleaner($str) {
+  $s = trim($str);
+  if (is_numeric($s)) {
+    if (intval($s) == $s) {
+      return intval($s);
+    } else {
+      return floatval($s);
+    }
+  } else {
+    return "'" . addslashes($s) . "'";
+  }
+}
+  
+
 // 'underscored' SQL to HTML
 //
 // Field names in SQL cannot have spaces, so underscores are used.
