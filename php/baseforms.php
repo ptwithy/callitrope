@@ -1017,7 +1017,7 @@ class DateFormField extends PatternFormField {
       $this->year = 1 * $matches[3];
       $this->month = 1 * $matches[1];
       $this->day = 1 * $matches[2];
-      if ($year < 100) {
+      if ($this->year < 100) {
         $date = getdate();
         $century = floor(($date['year']) / 100);
         $this->year = $century * 100 + $this->year;
@@ -1055,7 +1055,8 @@ class BirthdateFormField extends DateFormField {
 //
 class DaytimeFormField extends PatternFormField {
   var $ISO;
-  var $ISOPattern = "/^([0-2][0-9])\:([0-6][0-9])$/";
+  // We allow seconds, for compatibility with SQL, but we ignore them for now
+  var $ISOPattern = "/^([0-2][0-9])\:([0-6][0-9])\:?((?:[0-6][0-9])?)$/";
   var $LocalPattern = "/^([0-2]?[0-9])\:?((?:[0-6][0-9])?)\s*([apAP]?)[mM]?$/";
   var $hour;
   var $minute;
