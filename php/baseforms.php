@@ -1292,7 +1292,7 @@ class ChoiceFormField extends FormField {
     if ($this->hasvalue()) {
       $choice = $this->choices[$this->value];
       if ($choice instanceof ChoiceItem) {
-        return "'" . $choice->SQLValue() . "'";
+        return $choice->SQLValue();
       } else {
         return "'" . addslashes($choice) . "'";
       }
