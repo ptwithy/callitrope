@@ -1498,43 +1498,6 @@ QUOTE;
 }
 
 ///
-// A FormField that will be represented as a checkbox, which is either
-// checked or not
-//
-class SingleCheckboxFormField extends RadioFormField {
-
-  function SingleCheckboxFormField($name, $description, $choices=nulll, $optional=false, $annotation="", $instance=NULL) {
-    parent::RadioFormField($name, $description, $choices, $optional, $annotation, $instance);
-    $this->hasselection = true;
-    $this->type = 'checkbox';
-  }
-}
-
-///
-// A FormField that will be represented as a checkbox, which _must be
-// checked
-//
-class RequiredCheckboxFormField extends SingleCheckboxFormField {
-
-  function RequiredCheckboxFormField($name, $description, $choices=null, $annotation="", $instance=NULL) {
-    parent::SingleCheckboxFormField($name, $description, $choices, false, $annotation, $instance);
-  }
-
-  function parseValue($source=NULL) {
-    if ($source == NULL) { $source = $_POST; }
-    if (! array_key_exists($this->name, $source)) {
-      return false;
-    }
-    return parent::parseValue($source);
-  }
-
-  function isvalid($value) {
-    return parent::isvalid($value) &&
-      (count($this->choices) == 1);
-  }
-}
-
-///
 // A FormField that has a limited set of choices, but allows more than
 // one choice.
 //
@@ -1704,6 +1667,33 @@ QUOTE;
 QUOTE;
 
     return $element;
+  }
+}
+
+///
+// A FormField that will be represented as a checkbox, which is either
+// checked or not
+//
+//
+// Deprecated:  CheckboxFormField with only one choice is equivalent
+//
+class SingleCheckboxFormField extends RadioFormField {
+
+  function SingleCheckboxFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
+    parent::CheckboxFormField($name, $description, $choices, $optional, $annotation, $instance);
+  }
+}
+
+///
+// A FormField that will be represented as a checkbox, which _must be
+// checked
+//
+// Deprecated:  CheckboxFormField with only one choice and $optional=false is equivalent
+//
+class RequiredCheckboxFormField extends CheckboxFormField {
+
+  function RequiredCheckboxFormField($name, $description, $choices=null, $annotation="", $instance=NULL) {
+    parent::CheckboxFormField($name, $description, $choices, false, $annotation, $instance);
   }
 }
 
