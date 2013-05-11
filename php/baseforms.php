@@ -46,7 +46,7 @@ function is_field ($f) { return $f instanceof FormField; };
 function order ($a, $b) { return $a->priority - $b->priority; };
 
 function fieldInternal($name, $description=null, $type=null, $optional=false, $annotation="") {
-  $namemap = array("email", "state", "zip", "phone", "birth", "date", "daytime", "time");
+  $namemap = array("email", "choice", "state", "zip", "phone", "cell", "birth", "date", "daytime", "time");
   if ($type == null) {
     foreach ($namemap as $n) {
       if (stristr($name, $n)) {
@@ -67,21 +67,28 @@ function fieldInternal($name, $description=null, $type=null, $optional=false, $a
     case "zip":
       return new ZipFormField($name, $description, $optional, $annotation);
     case "phone":
+    case "cell":
       return new PhoneFormField($name, $description, $optional, $annotation);
     case "date":
       return new DateFormField($name, $description, $optional, $annotation);
     case "birth":
+    case "birthdate":
       return new BirthdateFormField($name, $description, $optional, $annotation);
     case "daytime":
       return new DaytimeFormField($name, $description, $optional, $annotation);
     case "text":
     case "area":
+    case "textarea":
       return new TextAreaFormField($name, $description, $optional, $annotation);
     case "button":
     case "radio":
+    case "radiobutton":
+    case "choice":
+    case "single":
       return new RadioFormField($name, $description, null, $optional, $annotation);
     case "check":
     case "checkbox":
+    case "multiple":
       return new CheckboxFormField($name, $description, null, $optional, $annotation);
     case "menu":
       return new MenuFormField($name, $description, null, $optional, $annotation);
@@ -125,6 +132,26 @@ class Form {
   var $usedivs;
   // Error array from parsing
   var $errorMessages;
+  // Array of choices
+  var $enums;
+  
+  ///
+  // Compute the choices for an enum field
+  function choicesForField($field) {
+    return $this->enums[$field];
+  }
+  
+  // Define choices, possibly overriding defaults from DatabaseForm
+  function addChoice($field, $choice) {
+    $this->enums[$field] = $choice;
+  }
+  
+  function addChoices($choices) {
+    foreach ($choices as $enum => $choice) {
+      $this->addChoice($enum, $choice);
+    }
+  }
+  
 
   // This holds all the fields in the form.  Each time you create
   // a field, it will be added to this array.
@@ -151,6 +178,7 @@ class Form {
     $this->method = $method;
     $this->usedivs = $usedivs;
     $this->errorMessages = array();
+    $this->enums = array();
     $this->fields = array();
     $this->sections = array();
     $this->startSection($name);
@@ -447,24 +475,24 @@ class DatabaseForm extends Form {
   var $database;
   var $table;
   var $columns;
-  var $enums;
   
   function DatabaseForm($database, $table, $options=Array(name => null, action => "", method => "post", usedivs => false)) {
     parent::Form($options['name'] || $table, $options['action'], $options['method'], $options['usedivs']);
     $this->database = $database;
     $this->table = $table;
     $this->columns = columns_of_table($this->database, $this->table);
-    $this->enums = lookups_from_table_enums($this->database, $this->table);
-  }
-  
-  ///
-  // Compute the choices for an enum field
-  function choicesForField($field) {
-    $choices = Array();
-    foreach ($this->enums[$field] as $description => $index) {
-      $choices[$index ? $index : 0] = $description;
+    $lookups = lookups_from_table_enums($this->database, $this->table);
+    // Invert the maps to match form choices
+    $enums = array();
+    foreach ($lookups as $field => $lookup) {
+      $choices = array();
+      foreach($lookup as $description => $index) {
+        // 0 is not a valid value for an enum
+        $choices[$index ? $index : 0] = $description;
+      }
+      $enums[$field] = $choices;
     }
-    return $choices;
+    $this->enums = $enums;
   }
 }  
 
