@@ -45,6 +45,68 @@ $mobile = preg_match("/ipad|iphone|android/i",  $_SERVER['HTTP_USER_AGENT']);
 function is_field ($f) { return $f instanceof FormField; };
 function order ($a, $b) { return $a->priority - $b->priority; };
 
+function fieldInternal($name, $description=null, $type=null, $optional=false, $annotation="") {
+  $namemap = array("email", "state", "zip", "phone", "birth", "date", "daytime", "time");
+  if ($type == null) {
+    foreach ($namemap as $n) {
+      if (stristr($name, $n)) {
+        $type = $n;
+        break;
+      }
+    }
+  }
+  if ($description == null) { $description = ucwords(str_replace("_", " ", $name)); }
+  
+  switch ($type) {
+    case "email":
+      return new EmailFormField($name, $description, $optional, $annotation);
+    case "number":
+      return new NumberFormField($name, $description, null, null, null, $optional, $annotation);
+    case "state":
+      return new StateFormField($name, $description, $optional, $annotation);
+    case "zip":
+      return new ZipFormField($name, $description, $optional, $annotation);
+    case "phone":
+      return new PhoneFormField($name, $description, $optional, $annotation);
+    case "date":
+      return new DateFormField($name, $description, $optional, $annotation);
+    case "birth":
+      return new BirthdateFormField($name, $description, $optional, $annotation);
+    case "daytime":
+      return new DaytimeFormField($name, $description, $optional, $annotation);
+    case "text":
+    case "area":
+      return new TextAreaFormField($name, $description, $optional, $annotation);
+    case "button":
+    case "radio":
+      return new RadioFormField($name, $description, null, $optional, $annotation);
+    case "check":
+    case "checkbox":
+      return new CheckboxFormField($name, $description, null, $optional, $annotation);
+    case "menu":
+      return new MenuFormField($name, $description, null, $optional, $annotation);
+    default:
+      return new FormField($name, $description, $optional, $annotation);
+  }
+}
+
+///
+// Create a field
+//
+// $name - name of the field
+// $type - type of the field, can be inferred from some obvious names
+// $description - defaults to name with underscores removed and capitalized
+function field($name, $description=null, $type=null, $annotation="") {
+  return fieldInternal($name, $description, $type, false, $annotation);
+}
+///
+// Create an optional field
+//
+function optField($name, $description=null, $type=null, $annotation="") {
+  return fieldInternal($name, $description, $type, true, $annotation);
+}
+
+  
 ///
 // The basic form object
 //
@@ -118,8 +180,15 @@ class Form {
   function addField($formField) {
     if ($formField instanceof FormField) {
       $this->fields[$formField->name] = $formField;
+      $formField->setForm($this);
     } else {
       $this->fields[] = $formField;
+    }
+  }
+  
+  function addFields($fields) {
+    foreach ($fields as $f) {
+      $this->addfield($f);
     }
   }
 
@@ -364,11 +433,40 @@ QUOTE;
 // Deprecated:  All forms now support multiple sections
 //
 class MultisectionForm extends Form {
-  function MultisectionForm($name, $action="", $method="post") {
-    parent::Form($name, $action, $method);
+  function MultisectionForm($name, $action="", $method="post", $usedivs=false) {
+    parent::Form($name, $action, $method, $usedivs);
   }
 }
 
+
+///
+// Database-backed form.
+//
+// Can auto-create fields based on database columns.
+class DatabaseForm extends Form {
+  var $database;
+  var $table;
+  var $columns;
+  var $enums;
+  
+  function DatabaseForm($database, $table, $options=Array(name => null, action => "", method => "post", usedivs => false)) {
+    parent::Form($options['name'] || $table, $options['action'], $options['method'], $options['usedivs']);
+    $this->database = $database;
+    $this->table = $table;
+    $this->columns = columns_of_table($this->database, $this->table);
+    $this->enums = lookups_from_table_enums($this->database, $this->table);
+  }
+  
+  ///
+  // Compute the choices for an enum field
+  function choicesForField($field) {
+    $choices = Array();
+    foreach ($this->enums[$field] as $description => $index) {
+      $choices[$index ? $index : 0] = $description;
+    }
+    return $choices;
+  }
+}  
 
 ///
 // Basic Form Field object
@@ -377,6 +475,8 @@ class MultisectionForm extends Form {
 // form.
 //
 class FormField {
+  // The form this belongs to
+  var $form;
   // The name of the field
   var $name;
   // An English description of the field
@@ -438,6 +538,10 @@ class FormField {
     $multiple = is_null($this->instance) ? '' : '[]';
     $this->input = "{$name}{$multiple}";
     $this->priority = $priority;
+  }
+  
+  function setForm($form) {
+    $this->form = $form;
   }
 
   function setAnnotation($annotation) {
@@ -1146,12 +1250,14 @@ class TextAreaFormField extends FormField {
   function HTMLFormElement() {
     $instance = is_null($this->instance) ? '' : $this->instance;
 
+    // Higlight incorrect values
+    $class = $this->valid ? "" : ' class="invalid"';
     // Only insert the current value if it is valid.
     $val = ($this->hasvalue()) ? $this->HTMLValue() :  htmlspecialchars($this->default, ENT_QUOTES);
     return
 <<<QUOTE
 
-      <textarea name="{$this->input}" id="{$this->id}">{$val}</textarea>
+      <textarea{$class} name="{$this->input}" id="{$this->id}">{$val}</textarea>
 QUOTE;
   }
 
@@ -1236,10 +1342,19 @@ function arrayToSimpleItems ($choices) {
 class ChoiceFormField extends FormField {
   // Array of possible choices
   var $choices;
+  var $invalidChoice;
 
-  function ChoiceFormField($name, $description, $choices, $optional=false, $annotation="", $instance=NULL) {
+  function ChoiceFormField($name, $description, $choices=NULL, $optional=false, $annotation="", $instance=NULL) {
     parent::FormField($name, $description, $optional, $annotation, $instance);
     $this->choices = $choices;
+    $this->invalidChoice = MD5('not_bloody_likely');
+  }
+  
+  function setForm($form) {
+    parent::setForm($form);
+    if ($this->choices == null) {
+      $this->choices = $this->form->choicesForField($this->name);
+    }
   }
 
   function isvalid($key) {
@@ -1321,25 +1436,33 @@ class ChoiceFormField extends FormField {
 //
 // @param choices:array An array of the possible choices
 class RadioFormField extends ChoiceFormField {
-  var $hasselection;
 
-  function RadioFormField($name, $description, $choices, $optional=false, $annotation="", $instance=NULL) {
+  function RadioFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
     parent::ChoiceFormField($name, $description, $choices, $optional, $annotation, $instance);
-    $this->hasselection = false;
     $this->type = 'radio';
   }
 
   function HTMLFormElement() {
     $additional = $this->additionalInputAttributes();
+    // Higlight incorrect values
+    $class = $this->valid ? "" : ' class="invalid"';
     $element = "";
+    // Debugging
+    if (false) {
+      $element .= "<div>valid: " . ($this->valid ? "true" : "false") . "</div>";
+      $element .= "<div>choices keys: " . implode(",", array_keys($this->choices)) . "</div>";
+      $element .= "<div>choices values: " . implode(",", $this->choices) . "</div>";
+      $element .= "<div>value: {$this->value}</div>";
+    }
     $element .=
 <<<QUOTE
 
-      <fieldset id="{$this->id}">
+      <fieldset{$class} id="{$this->id}">
 QUOTE;
+    $hasselection = false;
     foreach ($this->choices as $key => $value) {
       $selected = ($this->value === $key) ? " checked" : "";
-      if ($selected) { $this->hasselection = true; }
+      if ($selected) { $hasselection = true; }
       if ($value instanceof ChoiceItem) {
         $desc = $value->description();
       } else {
@@ -1355,11 +1478,13 @@ QUOTE;
 QUOTE;
     }
     // Ensure this field will be posted
-    if (! $this->hasselection) {
+    // For a radio button, only one thing can be selected, so we omit this if there
+    // is a selection
+    if (! $hasselection) {
       $element .=
 <<<QUOTE
 
-        <input style="display: none" type="radio" name="{$this->input}" value="not_bloody_likely" checked>
+        <input style="display: none" type="radio" name="{$this->input}" value="$this->invalidChoice" checked>
 QUOTE;
     }
     $element .=
@@ -1378,7 +1503,7 @@ QUOTE;
 //
 class SingleCheckboxFormField extends RadioFormField {
 
-  function SingleCheckboxFormField($name, $description, $choices, $optional=false, $annotation="", $instance=NULL) {
+  function SingleCheckboxFormField($name, $description, $choices=nulll, $optional=false, $annotation="", $instance=NULL) {
     parent::RadioFormField($name, $description, $choices, $optional, $annotation, $instance);
     $this->hasselection = true;
     $this->type = 'checkbox';
@@ -1391,7 +1516,7 @@ class SingleCheckboxFormField extends RadioFormField {
 //
 class RequiredCheckboxFormField extends SingleCheckboxFormField {
 
-  function RequiredCheckboxFormField($name, $description, $choices, $annotation="", $instance=NULL) {
+  function RequiredCheckboxFormField($name, $description, $choices=null, $annotation="", $instance=NULL) {
     parent::SingleCheckboxFormField($name, $description, $choices, false, $annotation, $instance);
   }
 
@@ -1415,20 +1540,25 @@ class RequiredCheckboxFormField extends SingleCheckboxFormField {
 //
 class MultipleChoiceFormField extends ChoiceFormField {
 
-  function MultipleChoiceFormField($name, $description, $choices, $optional=false, $annotation="", $instance=NULL) {
+  function MultipleChoiceFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
     parent::ChoiceFormField($name, $description, $choices, $optional, $annotation, $instance);
   }
 
   function isvalid($keyarray) {
+    // Optional implies you don't need to have _any_ choices
     $valid = (! $this->required);
-    // Can't check isset, because we want to allow NULL as a possible
-    // value
     if (isset($keyarray)) {
       foreach ($keyarray as $key) {
-        if (! array_key_exists($key, $this->choices)) {
+        // Can't check isset, because we want to allow NULL as a possible
+        // value
+        if ($key == $this->invalidChoice) {
+          // Ignore -- this is just to ensure a value is submitted/parsed
+        } else if (array_key_exists($key, $this->choices)) {
+          // We have at least one choice
+          $valid = true;
+        } else {
           return false;
         }
-        $valid = true;
       }
     }
     return $valid;
@@ -1520,16 +1650,26 @@ class MultipleChoiceFormField extends ChoiceFormField {
 // @param choices:array An array of the possible choices
 class CheckboxFormField extends MultipleChoiceFormField {
 
-  function CheckboxFormField($name, $description, $choices, $optional=false, $annotation="", $instance=NULL) {
+  function CheckboxFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
     parent::MultipleChoiceFormField($name, $description, $choices, $optional, $annotation, $instance);
   }
 
   function HTMLFormElement() {
+    // Higlight incorrect values
+    $class = $this->valid ? "" : ' class="invalid"';
     $element = "";
+    // Debugging
+    if (false) {
+      $element .= "<div>valid: " . ($this->valid ? "true" : "false") . "</div>";
+      $element .= "<div>choices keys: " . implode(",", array_keys($this->choices)) . "</div>";
+      $element .= "<div>choices values: " . implode(",", $this->choices) . "</div>";
+      $element .= "<div>value array keys:" . implode(",", array_keys($this->value)) . "</div>";
+      $element .= "<div>value array values:" . implode(",", $this->value) . "</div>";
+    }
     $element .=
 <<<QUOTE
 
-      <fieldset id="{$this->id}">
+      <fieldset{$class} id="{$this->id}">
 QUOTE;
     foreach ($this->choices as $key => $value) {
       $selected = ($this->value && in_array($key, $this->value)) ? " checked" : "";
@@ -1545,6 +1685,16 @@ QUOTE;
           <input name="{$this->input}[]" type="checkbox" class="checkbox" value="{$key}"{$selected}>
           <span>{$desc}</span>
         </label>
+QUOTE;
+    }
+    // Ensure this field will be posted at least once (so it gets parsed)
+    // For a checkbox multiple selections are allowed, so we can unilaterally 
+    // include this -- the invalidChoice is ignored by isvalid/canonical
+    {
+      $element .=
+<<<QUOTE
+
+        <input style="display: none" type="checkbox" name="{$this->input}[]" value="$this->invalidChoice" checked>
 QUOTE;
     }
     $element .=
@@ -1563,7 +1713,7 @@ QUOTE;
 // @param choices:array An array of the possible choices
 class MenuFormField extends ChoiceFormField {
 
-  function MenuFormField($name, $description, $choices, $optional=false, $annotation="", $instance=NULL) {
+  function MenuFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
     parent::ChoiceFormField($name, $description, $choices, $optional, $annotation, $instance);
   }
 
@@ -1571,11 +1721,13 @@ class MenuFormField extends ChoiceFormField {
   // describes the choice you have to make
   function HTMLFormElement() {
     $additional = $this->additionalInputAttributes();
+    // Higlight incorrect values
+    $class = $this->valid ? "" : ' class="invalid"';
     $element = '';
     $element .=
 <<<QUOTE
 
-      <select name="{$this->input}" id="{$this->id}"{$additional}>
+      <select{$class} name="{$this->input}" id="{$this->id}"{$additional}>
         <option>Select {$this->description}</option>
 QUOTE;
     foreach ($this->choices as $key => $value) {
@@ -1675,10 +1827,12 @@ class MenuItemFormField extends MenuFormField {
 
   // Override to interpret separators and MenuItems
   function HTMLFormElement() {
+    // Higlight incorrect values
+    $class = $this->valid ? "" : ' class="invalid"';
     $element =
 <<<QUOTE
 
-      <select name="{$this->input}" id="{$this->id}">
+      <select{$class} name="{$this->input}" id="{$this->id}">
         <option>Select {$this->description}</option>
 QUOTE;
     foreach ($this->choices as $key => $value) {
