@@ -346,7 +346,7 @@ function columns_of_table($db, $table) {
     $selector = "SHOW COLUMNS FROM $table";
     $query = mysql_query($selector, $db) or ode();
     $columns = array();
-    while ($object = mysql_fetch_object($query)) {
+    while ($row = mysql_fetch_object($query)) {
         $columns[$row->field] = $row;
     }
     return $columns;

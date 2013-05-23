@@ -132,6 +132,30 @@ class Form {
   var $usedivs;
   // Error array from parsing
   var $errorMessages;
+  
+  // Array of fields to auto-add
+  var $columns;
+  
+  function autoAddFields($columns=null) {
+    if ($columns != null) {
+      $this->columns = $columns;
+    }
+    foreach ($this->columns as $col) {
+      if (array_key_exists($col, $this->enums)) {
+        $e = $this->enums[$col];
+        if (array_key_exists(0, $e)) {
+          $this->addField(field($col, null, "checkbox"));
+        } elseif (in_array("", $e)) {
+          $this->addField(field($col, null, "menu"));
+        } else {
+          $this->addField(field($col, null, "radio"));
+        }
+      } else {
+        $this->addField(field($col));
+      }
+    }
+  }
+  
   // Array of choices
   var $enums;
   
@@ -474,7 +498,6 @@ class MultisectionForm extends Form {
 class DatabaseForm extends Form {
   var $database;
   var $table;
-  var $columns;
   
   function DatabaseForm($database, $table, $options=Array(name => null, action => "", method => "post", usedivs => false)) {
     parent::Form($options['name'] || $table, $options['action'], $options['method'], $options['usedivs']);
