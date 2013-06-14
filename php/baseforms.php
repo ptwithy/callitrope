@@ -228,7 +228,6 @@ class Form {
     }
   }
 
-
   function addField($formField) {
     if ($formField instanceof FormField) {
       $this->fields[$formField->name] = $formField;
@@ -385,9 +384,11 @@ QUOTE;
   //
   // @param $section:string Restrict to the specified section, otherwise
   // all sections
-  function SQLForm($section=null) {
+  function SQLForm($section=null, $fields=null) {
     $sql = "";
-    $fields = $section ? $this->sections[$section] : $this->fields;
+    if (! $fields) {
+      $fields = $section ? $this->sections[$section] : $this->fields;
+    }
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
         $form = $field->SQLForm();
@@ -404,9 +405,11 @@ QUOTE;
   //
   // @param $section:string Restrict to the specified section, otherwise
   // all sections
-  function SQLValues($section=null) {
+  function SQLValues($section=null, $fields=null) {
     $sql = "";
-    $fields = $section ? $this->sections[$section] : $this->fields;
+    if (! $fields) {
+      $fields = $section ? $this->sections[$section] : $this->fields;
+    }
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
         $value = $field->SQLValue();
@@ -500,7 +503,7 @@ class DatabaseForm extends Form {
   var $table;
   
   function DatabaseForm($database, $table, $options=Array(name => null, action => "", method => "post", usedivs => false)) {
-    parent::Form($options['name'] || $table, $options['action'], $options['method'], $options['usedivs']);
+    parent::Form($options['name'] ? $options['name'] : $table, $options['action'], $options['method'], $options['usedivs']);
     $this->database = $database;
     $this->table = $table;
     $this->columns = columns_of_table($this->database, $this->table);
@@ -517,6 +520,29 @@ class DatabaseForm extends Form {
     }
     $this->enums = $enums;
   }
+  
+  // Insert the values into the table
+  function SQLInsert($additional = null, $options=Array(section => null, fields => null, table => null, database => null)) {
+    global $debugging;
+    $database = $options['database'] ? $options['database'] : $this->database;
+    $table = $options['table'] ? $options['table'] : $this->table;
+    $sql = "INSERT INTO " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
+    if ($addtional) {
+      $sql .= ", ";
+      $sql .= $additional;
+    }
+   	// Make the query, report any errors
+  	if (! $result = mysql_query($sql, $database)) {
+      if ($debugging) {
+        echo "<p style='font-size: smaller'>";
+        echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
+        echo "<br>";
+        echo "[Error: <span style='font-style: italic'>" . mysql_error() . "</span>]";
+        echo "</p>";
+      }
+    }
+    return $result;
+  } 
 }  
 
 ///
