@@ -1754,7 +1754,7 @@ QUOTE;
 //
 // Deprecated:  CheckboxFormField with only one choice is equivalent
 //
-class SingleCheckboxFormField extends RadioFormField {
+class SingleCheckboxFormField extends CheckboxFormField {
 
   function SingleCheckboxFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
     parent::CheckboxFormField($name, $description, $choices, $optional, $annotation, $instance);
