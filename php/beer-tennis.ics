@@ -1,0 +1,211 @@
+<?php
+
+/**
+ * Copyright (c) 2013, callitrope
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+  // Do all the processing that could cause an error before you output
+  // any part of the real document
+  
+  // Turn on debugging for now (print_error_and_exit function in
+  // database.php uses this)
+  $debugging = true;
+
+  // Connect to database
+  include("pt.withington.org/database_r.php");
+  
+  // Now output the real document
+
+  header("Content-Type: text/Calendar");
+  header("Content-Disposition: inline; filename=Tennis.ics");
+  header("Cache-Control: max-age=900, private, must-revalidate");  // HTTP/1.1
+  header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");       // Date in the pasta
+  header("Pragma: no-cache");                             // Superstition
+
+  $what = "beer-tennis";
+  $pretty = "Beer Tennis";
+  $also = "";
+  if (isset($_GET['q'])) {
+    $who = clean($_GET['q']);
+    $also = " AND (player1 = '{$who}' OR player2 = '{$who}' OR player3 = '{$who}' OR player4 = '{$who}')";
+    $pretty .= " ({$who})";
+  }
+
+// icalendar requires crlf
+// NOTE: must include trailing blank line in here doc
+echo <<<QUOTE
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//callitrope//NOTATION RFC 2445/iCalendar//EN
+CALSCALE:GREGORIAN
+BEGIN:VTIMEZONE
+TZID:America/New_York
+BEGIN:DAYLIGHT
+TZOFFSETFROM:-0500
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+DTSTART:20070311T020000
+TZNAME:EDT
+TZOFFSETTO:-0400
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:-0400
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+DTSTART:20071104T020000
+TZNAME:EST
+TZOFFSETTO:-0500
+END:STANDARD
+END:VTIMEZONE
+METHOD:PUBLISH
+X-WR-CALNAME;VALUE=TEXT:{$pretty}
+X-WR-TIMEZONE;VALUE=TEXT:America/New_York
+X-PUBLISHED-TTL:PT4H
+
+QUOTE;
+
+  $select = <<<QUOTE
+  SELECT 
+    c.id, 
+    DATE_FORMAT(date, '%Y%m%d') AS start_date, 
+    DATE_FORMAT(date, '%Y%m%d') AS end_date, 
+    DATE_FORMAT(date + INTERVAL 1 DAY, '%Y%m%d') AS end_next_date,
+    '19:00' AS start_time,
+    TIME_FORMAT('19:00', '%H%i%s') AS start_time_formatted,
+    '20:30' AS end_time,
+    TIME_FORMAT('20:30', '%H%i%s') AS end_time_formatted,
+    '{$pretty}' AS title,
+    UPPER(CONCAT(player1, ', ', player2, ', ', player3, ', ', player4)) AS entry,
+    'Court 4' as place,
+    p1.email AS a1email,
+    p2.email AS a2email,
+    p3.email AS a3email,
+    p4.email AS a4email,
+    p1.name AS a1name,
+    p2.name AS a2name,
+    p3.name AS a3name,
+    p4.name AS a4name,
+    DATE_FORMAT(created, '%Y%m%dT%H%i%s') AS create_time, 
+    DATE_FORMAT(modified, '%Y%m%dT%H%i%s') AS mod_time
+  FROM 
+    tennis_calendar c
+  JOIN tennis_player p1 on player1 = p1.id
+  JOIN tennis_player p2 on player2 = p2.id
+  JOIN tennis_player p3 on player3 = p3.id
+  JOIN tennis_player p4 on player4 = p4.id
+  WHERE YEAR(date) >= YEAR(CURDATE())
+  {$also}
+  ORDER BY date ASC
+QUOTE;
+  
+  // Patterns and replacements to strip HTML
+  // and escape characters that are special in iCalendar TEXT:
+  // Turn <br /> into one escaped newline
+  // Turn </p> into two escaped newlines
+  // Turn all other tags into whitespace
+  // Collapse whitespace
+  // collapse any space around newlines
+  // Turn multiple consecutive newlines into just 2
+  // Escape all remaining newlines, commas and semi-colons
+  // Convert some popular &xxx; escapes
+  // 
+  // N.B.: the order of these patterns is important to making
+  // the heuristic work
+  $patterns = array("/[\s\n]*<br\s*\/?>[\s\n]*/i", 
+                    "/[\s\n]*<\/p>[\s\n]*/i", 
+            "/[\n]*<[^>]*>[\n]*/",
+            "/\s+/",
+            "/\s*\n\s*/",
+            "/\n{2,}/",
+            "/\n/",
+            "/,/",
+            "/;/",
+            "/&amp;/i", 
+            "/&lt;/i",
+            "/&gt;/i");
+  $replacements = array("\\n",
+                        "\\n\\n", 
+              " ",
+              " ",
+              "\n",
+              "\n\n",
+                        "\\n",
+                        "\\,",
+                        "\\;", 
+                        "&",
+                        "<",
+                        ">");
+    
+  $query = mysql_query($select, $db) or ode();
+
+  while ($row = mysql_fetch_assoc($query))
+  {
+    $uid = $row['id'] . "-" . $what . "@pt.withington.org";
+    if ($row['start_time'] !== NULL) {
+      $start_date_time = 'DTSTART;TZID=America/New_York:' . $row['start_date'] . 'T' . $row['start_time_formatted'];
+    } else {
+      $start_date_time = "DTSTART;VALUE=DATE:" . $row['start_date'];
+    }
+    if ($row['end_time'] !== NULL) {
+      $end_date_time = 'DTEND;TZID=America/New_York:' . $row['end_date'] . 'T' . $row['end_time_formatted'];
+    } else {
+      // End date is _exclusive_
+      $end_date_time = "DTEND;VALUE=DATE:" . $row['end_next_date'];
+    }
+    if ($end_date_time == $start_date_time) {
+      $end_date_time = "DURATION:P1D";
+    }
+    $summary = "SUMMARY:" . preg_replace($patterns, $replacements, ($row['title']));
+    // Optional fields need their own line endings
+    $desc = "";
+    if ($row['entry']) {
+      $desc = "DESCRIPTION:" . preg_replace($patterns, $replacements, $row['entry']) . "\r\n";
+    }
+    $where = "";
+    if ($row['place']) {
+      $where = "LOCATION:" . preg_replace($patterns, $replacements, $row['place']) . "\r\n";
+    }
+    $attend = "";
+    foreach (array("a1", "a2", "a3", "a4") as $a) {
+      if ($attend) { $attend .= "\r\n"; }
+      $attend .= "ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN=" . $row[$a . "name"] . ":mailto:" . $row[$a . email];
+    }
+        
+// icalendar requires crlf
+// NOTE: must include trailing blank line in here doc
+echo <<<QUOTE
+BEGIN:VEVENT
+DTSTAMP:{$row['mod_time']}
+UID:{$uid}
+{$start_date_time}
+{$end_date_time}
+{$summary}
+{$desc}{$where}{$attend}
+END:VEVENT
+
+QUOTE;
+  }
+?>
+END:VCALENDAR
