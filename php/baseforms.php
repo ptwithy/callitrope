@@ -34,6 +34,19 @@
 
 include_once("subroutines.php");
 
+function PHPtoSQL($val) {
+  // Don't quote numbers
+  if (is_numeric($val)) {
+    if (intval($val) == $val) {
+      return intval($val);
+    } else {
+      return floatval($val);
+    }
+  } else {
+    return "'" . addslashes($val) . "'";
+  }
+}
+
 // See if our browser has HTML5 features like `placeholder`
 // Webkit = Safari, Chrome; Presto = Opera
 $html5 = preg_match("/webkit|presto/i", $_SERVER['HTTP_USER_AGENT']);
@@ -422,6 +435,27 @@ QUOTE;
     return $sql;
   }
 
+  // Returns a string representing the SQL fields of the form
+  // (normalized to return values in a SELECT statement the way we expect --
+  // in particular, enums are converted to ints)
+  //
+  // @param $section:string Restrict to the specified section, otherwise
+  // all sections
+  function SQLFields($section=null, $fields=null) {
+    $sql = "";
+    if (! $fields) {
+      $fields = $section ? $this->sections[$section] : $this->fields;
+    }
+    foreach ($fields as $field) {
+      if ($field instanceof FormField) {
+        $value = $field->SQLField();
+        if ($sql != "") { $sql .= ", "; }
+        $sql .= $value;
+      }
+    }
+    return $sql;
+  }
+
   // Returns a string representing the text version of the form
   //
   // @param $brief:boolean if true, use the field name rather than
@@ -531,8 +565,8 @@ class DatabaseForm extends Form {
       $sql .= ", ";
       $sql .= $additional;
     }
-   	// Make the query, report any errors
-  	if (! $result = mysql_query($sql, $database)) {
+    // Make the query, report any errors
+    if (! $result = mysql_query($sql, $database)) {
       if ($debugging) {
         echo "<p style='font-size: smaller'>";
         echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
@@ -542,7 +576,33 @@ class DatabaseForm extends Form {
       }
     }
     return $result;
-  } 
+  }
+  
+  // Fetch values from the table
+  function SQLSelect($id, $additional = null, $options=Array(section => null, fields => null, table => null, database => null, idname => "id")) {
+    global $debugging;
+    $database = $options['database'] ? $options['database'] : $this->database;
+    $table = $options['table'] ? $options['table'] : $this->table;
+    $idname = $options['id'] ? $options['id'] : "id";
+    $sql = "SELECT " . $this->SQLFields($options['section'], $options['fields']) . " FROM " . $table . " WHERE {$idname} = " . PHPtoSQL($id);
+    
+    if ($addtional) {
+      $sql .= ", ";
+      $sql .= $additional;
+    }
+    // Make the query, report any errors
+    if (! $result = mysql_query($sql, $database)) {
+      if ($debugging) {
+        echo "<p style='font-size: smaller'>";
+        echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
+        echo "<br>";
+        echo "[Error: <span style='font-style: italic'>" . mysql_error() . "</span>]";
+        echo "</p>";
+      }
+    }
+    return $result;
+  }
+   
 }  
 
 ///
@@ -714,16 +774,7 @@ class FormField {
     if ($this->hasvalue()) {
       // NOT choice -- SQL Stores representation
       $val = $this->value;
-      // Don't quote numbers
-      if (is_numeric($val)) {
-        if (intval($val) == $val) {
-          return intval($val);
-        } else {
-          return floatval($val);
-        }
-      } else {
-        return "'" . addslashes($val) . "'";
-      }
+      return PHPtoSQL($val);
     } else {
       return "DEFAULT";
     }
@@ -870,6 +921,11 @@ QUOTE;
   // into a database.
   function SQLForm() {
     return "`{$this->id}` = " . $this->SQLValue();
+  }
+
+  // Create an SQL expression that will fetch the field's canonical value
+  function SQLField() {
+    return "`{$this->id}`";
   }
 
   // Heuristicates colon after label in TextForm
@@ -1480,6 +1536,17 @@ class ChoiceFormField extends FormField {
     }
   }
 
+  function SQLField() {
+    // Coerce enums to the type we expect
+    $keys = array_keys($this->choices);
+    $field = parent::SQLField();
+    if (is_numeric($keys[0])) {
+      return "{$field}+0 AS {$field}";
+    } else {
+      return $field;
+    }
+  }
+
   function SQLValue() {
     if ($this->hasvalue()) {
       $choice = $this->choices[$this->value];
@@ -1791,6 +1858,13 @@ class MenuFormField extends ChoiceFormField {
     // Higlight incorrect values
     $class = $this->valid ? "" : ' class="invalid"';
     $element = '';
+    // Debugging
+    if (false) {
+      $element .= "<div>valid: " . ($this->valid ? "true" : "false") . "</div>";
+      $element .= "<div>choices keys: " . implode(",", array_keys($this->choices)) . "</div>";
+      $element .= "<div>choices values: " . implode(",", $this->choices) . "</div>";
+      $element .= "<div>value: {$this->value}</div>";
+    }
     $element .=
 <<<QUOTE
 
