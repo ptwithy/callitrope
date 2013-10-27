@@ -483,7 +483,7 @@ QUOTE;
   // @param validate:Boolean (optional) whether or not to validate
   // the values.  Default is true
   function parseValues($source=NULL, $validate=true) {
-    if ($source == NULL) { $source = $_POST; }
+    if ($source == NULL) { $source = $this->method == "post" ? $_POST : $_GET; }
     $ok = true;
     $errors = array();
     // See "PHP sucks" above
@@ -554,18 +554,10 @@ class DatabaseForm extends Form {
     }
     $this->enums = $enums;
   }
-  
-  // Insert the values into the table
-  function SQLInsert($additional = null, $options=Array(section => null, fields => null, table => null, database => null)) {
+
+  // Make the query, report any errors
+  function SQLExecuteQuery($sql, $database) {
     global $debugging;
-    $database = $options['database'] ? $options['database'] : $this->database;
-    $table = $options['table'] ? $options['table'] : $this->table;
-    $sql = "INSERT INTO " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
-    if ($addtional) {
-      $sql .= ", ";
-      $sql .= $additional;
-    }
-    // Make the query, report any errors
     if (! $result = mysql_query($sql, $database)) {
       if ($debugging) {
         echo "<p style='font-size: smaller'>";
@@ -577,10 +569,41 @@ class DatabaseForm extends Form {
     }
     return $result;
   }
+    
+  // Insert the values into the table
+  function SQLInsert($additional = null, $options=Array(section => null, fields => null, table => null, database => null)) {
+    $database = $options['database'] ? $options['database'] : $this->database;
+    $table = $options['table'] ? $options['table'] : $this->table;
+    $sql = "INSERT INTO " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
+    if ($addtional) {
+      $sql .= ", ";
+      $sql .= $additional;
+    }
+    return $this->SQLExecuteQuery($sql, $database);
+  }
+
+  // Update an entry in the table
+  function SQLUpdate($additional = null, $options=Array(section => null, fields => null, table => null, database => null)) {
+    $database = $options['database'] ? $options['database'] : $this->database;
+    $table = $options['table'] ? $options['table'] : $this->table;
+    $sql = "REPLACE " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
+    if ($addtional) {
+      $sql .= ", ";
+      $sql .= $additional;
+    }
+    return $this->SQLExecuteQuery($sql, $database);
+  }
+
+  // Delete an entry from the table
+  function SQLDelete($id, $options=Array(table => null, database => null)) {
+    $database = $options['database'] ? $options['database'] : $this->database;
+    $table = $options['table'] ? $options['table'] : $this->table;
+    $sql = "DELETE FROM " . $table . " WHERE " . $this->field($id)->SQLForm();
+    return $this->SQLExecuteQuery($sql, $database);
+  }
   
   // Fetch values from the table
   function SQLSelect($id, $additional = null, $options=Array(section => null, fields => null, table => null, database => null, idname => "id")) {
-    global $debugging;
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
     $idname = $options['id'] ? $options['id'] : "id";
@@ -590,19 +613,9 @@ class DatabaseForm extends Form {
       $sql .= ", ";
       $sql .= $additional;
     }
-    // Make the query, report any errors
-    if (! $result = mysql_query($sql, $database)) {
-      if ($debugging) {
-        echo "<p style='font-size: smaller'>";
-        echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
-        echo "<br>";
-        echo "[Error: <span style='font-style: italic'>" . mysql_error() . "</span>]";
-        echo "</p>";
-      }
-    }
-    return $result;
+    return $this->SQLExecuteQuery($sql, $database);
   }
-   
+
 }  
 
 ///
@@ -921,6 +934,10 @@ QUOTE;
   // into a database.
   function SQLForm() {
     return "`{$this->id}` = " . $this->SQLValue();
+  }
+  
+  function __toString() {
+    return $this->SQLForm();
   }
 
   // Create an SQL expression that will fetch the field's canonical value
@@ -1428,10 +1445,6 @@ class ChoiceItem {
     return htmlspecialchars($this->name, ENT_QUOTES);
   }
 
-  function SQLValue() {
-    return "'" . addslashes($this->name) . "'";
-  }
-
   function TextValue() {
     return $this->description;
   }
@@ -1547,18 +1560,7 @@ class ChoiceFormField extends FormField {
     }
   }
 
-  function SQLValue() {
-    if ($this->hasvalue()) {
-      $choice = $this->choices[$this->value];
-      if ($choice instanceof ChoiceItem) {
-        return $choice->SQLValue();
-      } else {
-        return "'" . addslashes($choice) . "'";
-      }
-    } else {
-      return "DEFAULT";
-    }
-  }
+  // See FormField::SQLValue -- we store the value, not the presentation
 
   function TextValue() {
     if ($this->hasvalue()) {
@@ -1708,12 +1710,9 @@ class MultipleChoiceFormField extends ChoiceFormField {
   function SQLValue() {
     if ($this->hasvalue()) {
       $sql = array();
-      foreach ($this->choice() as $choice) {
-        if ($choice instanceof ChoiceItem) {
-          $sql[] = $choice->SQLValue();
-        } else {
-          $sql[] = addslashes($choice);
-        }
+      // NOT choice -- SQL Stores representation
+      foreach ($this->value as $val) {
+        $sql[] = addslashes(PHPtoSQL($val));
       }
       return "'" . join(",", $sql) . "'";
     } else {
@@ -1939,10 +1938,6 @@ class MenuItem {
     return htmlspecialchars($this->name, ENT_QUOTES);
   }
 
-  function SQLValue() {
-    return "'" . addslashes($this->name) . "'";
-  }
-
   function TextValue() {
     return $this->name;
   }
@@ -2010,13 +2005,7 @@ QUOTE;
     }
   }
 
-  function SQLValue() {
-    if ($this->hasvalue()) {
-      return $this->choice()->SQLValue();
-    } else {
-      return "DEFAULT";
-    }
-  }
+  // See FormField::SQLValue -- we store the value, not the presentation
 
   function TextValue() {
     if ($this->hasvalue()) {
