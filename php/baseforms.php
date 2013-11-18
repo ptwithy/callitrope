@@ -58,8 +58,8 @@ $mobile = preg_match("/ipad|iphone|android/i",  $_SERVER['HTTP_USER_AGENT']);
 function is_field ($f) { return $f instanceof FormField; };
 function order ($a, $b) { return $a->priority - $b->priority; };
 
-function fieldInternal($name, $description=null, $type=null, $optional=false, $annotation="") {
-  $namemap = array("email", "choice", "state", "zip", "phone", "cell", "birth", "date", "daytime", "time");
+function fieldInternal($name, $description=null, $type=null, $optional=false, $options=null) {
+  $namemap = array("email", "choice", "state", "zip", "postal", "country", "phone", "cell", "birth", "date", "daytime", "time");
   if ($type == null) {
     foreach ($namemap as $n) {
       if (stristr($name, $n)) {
@@ -69,44 +69,50 @@ function fieldInternal($name, $description=null, $type=null, $optional=false, $a
     }
   }
   if ($description == null) { $description = ucwords(str_replace("_", " ", $name)); }
+  $annotation = $options["annotation"];
+  $instance = $options["instance"];
   
   switch ($type) {
     case "email":
-      return new EmailFormField($name, $description, $optional, $annotation);
+      return new EmailFormField($name, $description, $optional, $annotation, $instance);
     case "number":
-      return new NumberFormField($name, $description, null, null, null, $optional, $annotation);
+      return new NumberFormField($name, $description, $options["min"], $options["max"], $options["step"], $optional, $annotation, $instance);
     case "state":
-      return new StateFormField($name, $description, $optional, $annotation);
+      return new StateFormField($name, $description, $optional, $annotation, $instance);
     case "zip":
-      return new ZipFormField($name, $description, $optional, $annotation);
+      return new ZipFormField($name, $description, $optional, $annotation, $instance);
+    case "postal":
+      return new PostalCodeFormField($name, $description, $optional, $annotation, $instance);
+    case "country":
+      return new CountryFormField($name, $description, $optional, $annotation, $instance);
     case "phone":
     case "cell":
-      return new PhoneFormField($name, $description, $optional, $annotation);
+      return new PhoneFormField($name, $description, $optional, $annotation, $instance);
     case "date":
-      return new DateFormField($name, $description, $optional, $annotation);
+      return new DateFormField($name, $description, $optional, $annotation, $instance);
     case "birth":
     case "birthdate":
-      return new BirthdateFormField($name, $description, $optional, $annotation);
+      return new BirthdateFormField($name, $description, $optional, $annotation, $instance);
     case "daytime":
-      return new DaytimeFormField($name, $description, $optional, $annotation);
+      return new DaytimeFormField($name, $description, $optional, $annotation, $instance);
     case "text":
     case "area":
     case "textarea":
-      return new TextAreaFormField($name, $description, $optional, $annotation);
+      return new TextAreaFormField($name, $description, $optional, $annotation, $instance);
     case "button":
     case "radio":
     case "radiobutton":
     case "choice":
     case "single":
-      return new RadioFormField($name, $description, null, $optional, $annotation);
+      return new RadioFormField($name, $description, $options["choices"], $optional, $annotation, $instance);
     case "check":
     case "checkbox":
     case "multiple":
-      return new CheckboxFormField($name, $description, null, $optional, $annotation);
+      return new CheckboxFormField($name, $description, $options["choices"], $optional, $annotation, $instance);
     case "menu":
-      return new MenuFormField($name, $description, null, $optional, $annotation);
+      return new MenuFormField($name, $description, $options["choices"], $optional, $annotation, $instance);
     default:
-      return new FormField($name, $description, $optional, $annotation);
+      return new FormField($name, $description, $optional, $annotation, $instance);
   }
 }
 
@@ -116,14 +122,14 @@ function fieldInternal($name, $description=null, $type=null, $optional=false, $a
 // $name - name of the field
 // $type - type of the field, can be inferred from some obvious names
 // $description - defaults to name with underscores removed and capitalized
-function field($name, $description=null, $type=null, $annotation="") {
-  return fieldInternal($name, $description, $type, false, $annotation);
+function field($name, $description=null, $type=null, $options=null) {
+  return fieldInternal($name, $description, $type, false, $options);
 }
 ///
 // Create an optional field
 //
-function optField($name, $description=null, $type=null, $annotation="") {
-  return fieldInternal($name, $description, $type, true, $annotation);
+function optField($name, $description=null, $type=null, $options=null) {
+  return fieldInternal($name, $description, $type, true, $options);
 }
 
   
@@ -243,7 +249,7 @@ class Form {
 
   function addField($formField) {
     if ($formField instanceof FormField) {
-      $this->fields[$formField->name] = $formField;
+      $this->fields[$formField->id] = $formField;
       $formField->setForm($this);
     } else {
       $this->fields[] = $formField;
@@ -256,31 +262,31 @@ class Form {
     }
   }
 
-  function field($fieldName) {
-    return $this->fields[$fieldName];
+  function field($fieldName, $instance=NULL) {
+    return $this->fields[$fieldName . ($instance == NULL ? '' : $instance) ];
   }
 
-  function fieldHasValue($fieldName) {
-    $field = $this->fields[$fieldName];
+  function fieldHasValue($fieldName, $instance=NULL) {
+    $field = $this->field($fieldName, $instance);
     return $field && $field->hasvalue();
   }
 
-  function fieldValue($fieldName) {
-    $field = $this->fields[$fieldName];
+  function fieldValue($fieldName, $instance=NULL) {
+    $field = $this->field($fieldName, $instance);
     if ($field && $field->hasvalue()) {
       return $field->choice();
     }
   }
 
-  function fieldHTMLValue($fieldName) {
-    $field = $this->fields[$fieldName];
+  function fieldHTMLValue($fieldName, $instance=NULL) {
+    $field = $this->field($fieldName, $instance);
     if ($field && $field->hasvalue()) {
       return $field->HTMLValue();
     }
   }
 
-  function fieldSQLValue($fieldName) {
-    $field = $this->fields[$fieldName];
+  function fieldSQLValue($fieldName, $instance=NULL) {
+    $field = $this->field($fieldName, $instance);
     if ($field) {
       // [2012-08-12 ptw] we know SQLValue returns the right thing if there
       // is no value
@@ -288,7 +294,7 @@ class Form {
     }
   }
 
-  function fieldTextValue($fieldName) {
+  function fieldTextValue($fieldName, $instance=NULL) {
     $field = $this->fields[$fieldName];
     if ($field && $field->hasvalue()) {
       return $field->TextValue();
@@ -406,13 +412,34 @@ QUOTE;
       if ($field instanceof FormField) {
         $form = $field->SQLForm();
         if ($form !== null) {
-          if ($sql != "") { $sql .= ", "; }
-          $sql .= $form;
+          $sql .= ($sql ? ", " : "") . $form;
         }
       }
     }
     return $sql;
   }
+  
+  // Returns a string to create the SQL table that will hold the form
+  //
+  // @param $section:string Restrict to the specified section, otherwise
+  // all sections
+  function SQLTable($section=null, $fields=null) {
+    $sql = "";
+    if (! $fields) {
+      $fields = $section ? $this->sections[$section] : $this->fields;
+    }
+    foreach ($fields as $field) {
+      if ($field instanceof FormField) {
+        $sql .= ($sql ? ",\n" : "") . $field->SQLTableColumn();
+      }
+    }
+    return <<<QUOTE
+      CREATE TABLE `{$this->name}` (
+        {$sql}
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+QUOTE;
+  }
+  
 
   // Returns a string representing the SQL values of the form
   //
@@ -448,9 +475,7 @@ QUOTE;
     }
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
-        $value = $field->SQLField();
-        if ($sql != "") { $sql .= ", "; }
-        $sql .= $value;
+        $sql .= ($sql ? ", " : "") . $field->SQLField();
       }
     }
     return $sql;
@@ -547,8 +572,10 @@ class DatabaseForm extends Form {
     foreach ($lookups as $field => $lookup) {
       $choices = array();
       foreach($lookup as $description => $index) {
-        // 0 is not a valid value for an enum
-        $choices[$index ? $index : 0] = $description;
+        // index null is how a nullable (optional) choice
+        if ($index != null) {
+          $choices[$index] = $description;
+        }
       }
       $enums[$field] = $choices;
     }
@@ -558,6 +585,11 @@ class DatabaseForm extends Form {
   // Make the query, report any errors
   function SQLExecuteQuery($sql, $database) {
     global $debugging;
+    if ($debugging > 1) {
+      echo "<p style='font-size: smaller'>";
+      echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
+      echo "</p>";
+    }
     if (! $result = mysql_query($sql, $database)) {
       if ($debugging) {
         echo "<p style='font-size: smaller'>";
@@ -575,7 +607,7 @@ class DatabaseForm extends Form {
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
     $sql = "INSERT INTO " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
-    if ($addtional) {
+    if ($additional) {
       $sql .= ", ";
       $sql .= $additional;
     }
@@ -587,7 +619,7 @@ class DatabaseForm extends Form {
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
     $sql = "REPLACE " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
-    if ($addtional) {
+    if ($additional) {
       $sql .= ", ";
       $sql .= $additional;
     }
@@ -595,10 +627,11 @@ class DatabaseForm extends Form {
   }
 
   // Delete an entry from the table
-  function SQLDelete($id, $options=Array(table => null, database => null)) {
+  function SQLDelete($options=Array(table => null, database => null, idname => "id")) {
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
-    $sql = "DELETE FROM " . $table . " WHERE " . $this->field($id)->SQLForm();
+    $idname = $options['id'] ? $options['id'] : "id";
+    $sql = "DELETE FROM " . $table . " WHERE " . $this->field($idname)->SQLForm();
     return $this->SQLExecuteQuery($sql, $database);
   }
   
@@ -609,7 +642,7 @@ class DatabaseForm extends Form {
     $idname = $options['id'] ? $options['id'] : "id";
     $sql = "SELECT " . $this->SQLFields($options['section'], $options['fields']) . " FROM " . $table . " WHERE {$idname} = " . PHPtoSQL($id);
     
-    if ($addtional) {
+    if ($additional) {
       $sql .= ", ";
       $sql .= $additional;
     }
@@ -682,16 +715,28 @@ class FormField {
     $this->annotation = $annotation;
     $this->readonly = false;
     $this->valid = true;
+    $this->priority = $priority;
+    $this->setInstance($instance);
+  }
+  
+  function setInstance($instance=NULL) {
     $this->instance = $instance;
     $instance = is_null($this->instance) ? '' : $this->instance;
-    $this->id = "{$name}{$instance}";
-    $multiple = is_null($this->instance) ? '' : '[]';
-    $this->input = "{$name}{$multiple}";
-    $this->priority = $priority;
+    $this->id = "{$this->name}{$instance}";
+    $multiple = is_null($this->instance) ? '' : $this->instance; // Was '[]', but POST does not preserve order?
+    $this->input = "{$this->name}{$multiple}";
   }
   
   function setForm($form) {
     $this->form = $form;
+    if ($this->columns) {
+      $descriptor = $this->columns[$this->id];
+      if ($descriptor) {
+        if (preg_match("VARCHAR\((\d*)\)", $descriptor->type, $regs)) {
+          $this->maxlength = 0 + $regs[1];
+        }
+      }
+    }
   }
 
   function setAnnotation($annotation) {
@@ -762,13 +807,10 @@ class FormField {
     if ($source == NULL) { $source = $_POST; }
     // This allows you to have a dynamic form -- we won't check
     // fields that didn't get posted.
-    if (! array_key_exists($this->name, $source)) {
+    if (! array_key_exists($this->input, $source)) {
       return true;
     }
-    $v = $source[$this->name];
-    if (! is_null($this->instance)) {
-      $v = $v[$this->instance];
-    }
+    $v = $source[$this->input];
     // If the posted value is valid, store it
     $this->setValue($v);
     return $this->valid;
@@ -867,11 +909,23 @@ QUOTE;
 QUOTE;
   }
 
+  function HTMLTableColumn() {
+    $element = $this->HTMLFormElement();
+    if ($this->readonly) {
+      // We still need to submit the value
+      $element .=
+<<<QUOTE
+
+      <input type="hidden" name="{$this->input}" id="{$this->id}" value="{$this->value}">
+QUOTE;
+    }
+    return $element;
+  }
+  
   // Creates an HTML table row containing an input element
   // for entering this field in a form.
   function HTMLTableRow($usedivs=false) {
     $req = $this->required ? "<span class='required'>*</span>" : "";
-    $instance = is_null($this->instance) ? '' : $this->instance;
     $rowclass = $this->name;
     if ($this->required) {
       $rowclass .= ' requiredfield';
@@ -895,15 +949,7 @@ QUOTE;
         </{$td}>
         <{$td} class="field">
 QUOTE;
-    $form .= $this->HTMLFormElement();
-    if ($this->readonly) {
-      // We still need to submit the value
-      $form .=
-<<<QUOTE
-
-      <input type="hidden" name="{$this->input}" id="{$this->id}" value="{$this->value}">
-QUOTE;
-    }
+    $form .= $this->HTMLTableColumn();
     $form .=
 <<<QUOTE
 
@@ -940,11 +986,31 @@ QUOTE;
     return $this->SQLForm();
   }
 
+  // SQL column specification
+  function SQLTableColumn() {
+    $name = "`{$this->id}`";
+    $type = $this->SQLType();
+    $nullable = "NOT NULL";
+    $default = "";
+    if ($this->required) {
+    } else if ($this->default != null) {
+      $default = "DEFAULT " . PHPtoSQL($this->default);
+    } else {
+      $nullable = "NULL";
+      $default = "DEFAULT NULL";
+    }
+    return "{$name} {$type} {$nullable} {$default}";
+  }
+
   // Create an SQL expression that will fetch the field's canonical value
   function SQLField() {
     return "`{$this->id}`";
   }
 
+  function SQLType() {
+    return "VARCHAR(" . ($this->maxlength ? $this->maxlength : 63) . ")";
+  }
+  
   // Heuristicates colon after label in TextForm
   function addLabelColon($label) {
     // Add a trailing colon if no punctuation already
@@ -971,6 +1037,8 @@ class EmailFormField extends FormField {
     global $html5;
     parent::FormField($name, $description, $optional, $annotation, $instance);
     $this->type = $html5 ? "email" : "text";
+    // http://stackoverflow.com/questions/386294/what-is-the-maximum-length-of-a-valid-email-address
+    $this->maxlength = 254;
   }
 
   function isvalid($value) {
@@ -1052,17 +1120,36 @@ class NumberFormField extends FormField {
 
   function additionalInputAttributes () {
     $attrs = parent::additionalInputAttributes();
-    if ($this->min) {
+    if ($this->min != null) {
       $attrs .= " min='{$this->min}'";
     }
-    if ($this->max) {
+    if ($this->max != null) {
       $attrs .= " max='{$this->max}'";
     }
-    if ($this->step) {
+    if ($this->step != null) {
       $attrs .= " step='{$this->step}'";
     }
     return $attrs;
   }
+  
+  function SQLType() {
+    $max = 0;
+    if ($this->max != null) {
+      $max = $this->max;
+    }
+    if (($this->min != null) && ($this->min < 0) && ((- $this->min) > $max)) {
+      $max = (- $this->min);
+    }
+    // Simplistic -- improve if you really need to be a storage miser
+    $type = "INT";
+    if ($max && ($max < 128)) {
+      $type = "TINYINT";
+    } else if ($max > 2147483647) {
+      $type = "DECIMAL";
+    }
+    $digits = $max ? ceil(log10($max)) : null;
+    return $type . ($digits ? ("(" . $digits . ")") : "");
+  } 
 }
 
 
@@ -1118,7 +1205,7 @@ class StateFormField extends PatternFormField {
     parent::PatternFormField($name, $description, $optional, $annotation, $instance);
     // Override the default
     $this->maxlength = 2;
-    $this->pattern = "/^([A-Z]{2,2})$/";
+    $this->pattern = "/^([A-Za-z]{2,2})$/";
     $this->title = "state designation";
     $this->placeholder = 'ST';
   }
@@ -1130,6 +1217,19 @@ class StateFormField extends PatternFormField {
     return strtoupper($matches[1]);
   }
 }
+
+///
+// A FormField that is a 2-letter Country abbreviation
+class CountryFormField extends StateFormField {
+
+  function CountryFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
+    parent::StateFormField($name, $description, $optional, $annotation, $instance);
+    // Override the state settings
+    $this->title = "country designation";
+    $this->placeholder = 'CC';
+  }
+}
+
 
 ///
 // A FormField that is a ZIP code
@@ -1162,6 +1262,21 @@ class ZIPFormField extends PatternFormField {
     } else {
       return "DEFAULT";
     }
+  }
+}
+
+///
+// A FormField that is a Postal Code
+//
+class PostalCodeFormField extends FormField {
+
+  function PostalCodeFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
+    parent::FormField($name, $description, $optional, $annotation, $instance);
+    // Can't really do any validation on postal codes, they are too random!
+    // We can't know if the postal code is all numeric or not
+    $this->type = "text";
+    $this->title = "Postal Code";
+    $this->placeholder = '01234-5678';
   }
 }
 
@@ -1283,6 +1398,10 @@ class DateFormField extends PatternFormField {
     // Not choice because we don't know if it is valid yet.
     return $this->ISOValue();
   }
+  
+  function SQLType() {
+    return "DATE";
+  }  
 }
 
 ///
@@ -1383,6 +1502,10 @@ class DaytimeFormField extends PatternFormField {
 
     return $this->ISOValue();
   }
+  
+  function SQLType() {
+    return "DATETIME";
+  }
 }
 
 
@@ -1398,8 +1521,6 @@ class TextAreaFormField extends FormField {
 
   // Create the HTML form element for inputting this field
   function HTMLFormElement() {
-    $instance = is_null($this->instance) ? '' : $this->instance;
-
     // Higlight incorrect values
     $class = $this->valid ? "" : ' class="invalid"';
     // Only insert the current value if it is valid.
@@ -1421,6 +1542,15 @@ QUOTE;
       $text .= "\n\t" . $this->TextValue();
     }
     return $text;
+  }
+  
+  function SQLType() {
+    $max = $this->maxlength ? $this->maxlength : 255;
+    if ($max < pow(2,8)) {
+      return "VARCHAR(" . $max . ")";
+    } else {
+      return "TEXT";
+    }
   }
 }
 
@@ -1500,6 +1630,12 @@ class ChoiceFormField extends FormField {
     parent::setForm($form);
     if ($this->choices == null) {
       $this->choices = $this->form->choicesForField($this->name);
+    } else if ($form instanceof DatabaseForm) {
+      // If the database defines an enum, we need to use it for our choice array
+      $choices = $this->form->choicesForField($this->name);
+      if ($choices) {
+        $this->choices = $choices;
+      }
     }
   }
 
@@ -1574,6 +1710,14 @@ class ChoiceFormField extends FormField {
       return "";
     }
   }
+
+  function SQLType() {
+    $choices = "";
+    foreach($this->choices as $key => $choice) {
+      $choices .= ($choices ? ", " : "") . PHPtoSQL($choice);
+    }
+    return "ENUM({$choices})";
+  }  
 }
 
 
@@ -1748,6 +1892,14 @@ class MultipleChoiceFormField extends ChoiceFormField {
     }
     return $text;
   }
+
+  function SQLType() {
+    $choices = "";
+    foreach($this->choices as $key -> $choice) {
+      $choices .= ($choices ? ", " : "") . PHPtoSQL($choice);
+    }
+    return "SET({$choices})";
+  }  
 }
 
 ///
@@ -1919,6 +2071,9 @@ class TimeFormField extends MenuFormField {
     } else {
       return "DEFAULT";
     }
+  }
+  function SQLType() {
+    return "TIME";
   }
 }
 
