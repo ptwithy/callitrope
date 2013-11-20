@@ -41,24 +41,30 @@ if(array_key_exists('id', $_GET)) {
 // Handle validation, insertion into database, and acknowledgement
 //
 if ($_POST['process'] == 1) {
-  // If you come here from a submit, try parsing out the values
-  if ($form->parseValues()) {
-    // We got a valid form!
-	
-	$query = "REPLACE  neaot_calendar SET " . $form->SQLform();         
+  // If they cancelled, just go back    
+  if ($_POST['cancelButton'] == 'Revert Entry') {
+    // Go back to listing page
+    header("location: head.php");
+  } else {
+    // If you come here from a submit, try parsing out the values
+    if ($form->parseValues()) {
+      // We got a valid form!
+      if ($_POST['deleteButton'] == 'Delete Entry') {
+        $query = "DELETE FROM neaot_calendar WHERE " . $form->field('id')->SQLform();
+      } else {
+        $query = "REPLACE neaot_calendar SET " . $form->SQLform();         
+      }
+
       // Make the query, report any errors
       if(! $result = mysql_query($query, $db)) {
         echo "query error";
         // PTW's error reporter from database.php
         print_error_and_exit();
       }
-	  
-
-
-    // Go back to listing page
-    header("location: head.php");
+      // Go back to listing page
+      header("location: head.php");
+    }
   }
-
 
   // Otherwise, we fall through and re-display the form, with any
   // errors highlighted
@@ -121,8 +127,17 @@ Link example: [link text](http://www.neaot.com)<br>
 More about <a href="http://daringfireball.net/projects/markdown/basics" title="Markdown Basics" target="_blank">Markdown</a> </p>	
 
 <?php
-// Here comes the form
-echo $form->HTMLForm();
+  // We want to add a delete button to the form
+  $buttons =
+<<<QUOTE
+      <input type="submit" name="submitButton" value="Update Entry">&nbsp;&nbsp;
+      <input type="submit" name="cancelButton" value="Revert Entry">&nbsp;&nbsp;
+      <input class="submit" onclick="return confirm('Are you sure you want to delete this entry?')"  type="submit"  name="deleteButton" value="Delete Entry">
+QUOTE;
+
+// Here comes the form, pass in our custom buttons.
+// (The first argument is the value of the hidden 'process' field.)
+echo $form->HTMLForm(1, $buttons);
 ?>
 
 </div>

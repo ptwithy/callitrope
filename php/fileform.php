@@ -15,7 +15,7 @@ class FileFormField extends PatternFormField {
   // should be uploaded to
   function FileFormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0,
                           $options=array('directory' => 'files', 'maxsize' => 8388608)) {
-    parent::FormField($name, $description, $optional, $annotation);
+    parent::PatternFormField($name, $description, $optional, $annotation, $instance=NULL, $priority=0);
     $this->directory = array_key_exists('directory', $options) ? $options['directory'] : 'files';
     $this->maxsize = array_key_exists('maxsize', $options) ? $options['maxsize'] : 8388608;;
     $this->type = "file";
@@ -165,6 +165,7 @@ class ImageFormField extends FileFormField {
   var $store;
   var $width;
   var $height;
+  var $img;
   
   function ImageFormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0,
                           $options=array('directory' => 'images', 'maxsize' => 8388608, 'store' => NULL, 'width' => NULL, 'height' => NULL)) {
@@ -195,27 +196,26 @@ class ImageFormField extends FileFormField {
 
   function HTMLTableColumn() {
     $element = parent::HTMLTableColumn();
-    if ($this->valid) {
+    // Can't use $this->valid as the form starts out valid
+    if ($this->isvalid($this->value)) {
       switch (true) {
+        case ($this->store == 'sql' && $this->form->fieldHasValue('id')):
+          $id = urlencode($this->form->fieldValue('id'));
+          $element .=
+<<<QUOTE
+
+        <img src='fetchasset.php5?&i={$id}' />
+QUOTE;
+          break;
         case ($this->store == 'file'):
+        // sql that has not yet been stored
+        default:
           $webpath = $this->webpath($this->value);
           $element .=
 <<<QUOTE
 
         <img src='{$webpath}' />
 QUOTE;
-          break;
-        case ($this->store == 'sql'):
-          $name = urlencode($this->id);
-          $id = urlencode($this->value);
-          $element .=
-<<<QUOTE
-
-        <img src='fetchasset.php5?n={$name}&i={$id}' />
-QUOTE;
-          break;
-        default:
-          // Future expansion
           break;
       }
     }
@@ -242,26 +242,18 @@ QUOTE;
   // Resizes the file before moving it if width/height are set
   function moveFile($tempname, $filepath) {
     if (($this->width != NULL) || ($this->height != NULL)) {
-      return $this->resize_image_copying($tempname, $filepath, $this->width, $this->height);
+      return $this->moveFileWithResize($tempname, $filepath, $this->width, $this->height);
     } else {
       return parent::moveFile($tempname, $filepath);
     }
   }
 
-  function SQLField() {
-    return "`{$this->id}_name`, `{$this->id}_content`, `{$this->id}_type`, `{$this->id}_size`";
-  }
-
-  function SQLType() {
-    return "LONGBLOB";
-  }
-  
   // http://stackoverflow.com/questions/14649645/resize-image-in-php
   // http://salman-w.blogspot.com/2008/10/resize-images-using-phpgd-library.html
-  function resize_image_copying($file, $dest, $w, $h) {
+  function moveFileWithResize($tempfile, $filepath, $w, $h) {
     if ($w && (!$h)) { $h = $w; }
     if ($h && (!$w)) { $w = $h; }
-    list($width, $height, $image_type) = getimagesize($file);
+    list($width, $height, $image_type) = getimagesize($tempfile);
     $source_aspect = $width / $height;
     $dest_aspect = $w / $h;
 
@@ -276,36 +268,60 @@ QUOTE;
       $newheight = $w / $source_aspect;
     }
     switch ($image_type) {
-      case IMAGETYPE_GIF: $src = imagecreatefromgif($file); break;
-      case IMAGETYPE_JPEG: $src = imagecreatefromjpeg($file); break;
-      case IMAGETYPE_PNG: $src = imagecreatefrompng($file); break;
+      case IMAGETYPE_GIF: $src = imagecreatefromgif($tempfile); break;
+      case IMAGETYPE_JPEG: $src = imagecreatefromjpeg($tempfile); break;
+      case IMAGETYPE_PNG: $src = imagecreatefrompng($tempfile); break;
       default:  trigger_error('Unsupported filetype!', E_USER_WARNING);  break;
     }
+    unlink($tempfile);
     $dst = imagecreatetruecolor($newwidth, $newheight);
     imagecopyresampled($dst, $src, 0, 0, 0, 0, $newwidth, $newheight, $width, $height);
-    switch ($image_type) {
-      case IMAGETYPE_GIF: $result = imagegif($dst, $dest);break;
-      case IMAGETYPE_JPEG:  $result = imagejpeg($dst, $dest); break;
-      case IMAGETYPE_PNG: $result = imagepng($dst, $dest); break;
-      default: $result = false;
-    }
     imagedestroy($src);
+    // We always resize to png
+    $result = imagepng($dst, $filepath);
     imagedestroy($dst);
     return $result;
   }
   
-  function SQLValue() {
-    // Really must use prepared statement!
-    $filepath = $this->filepath($this->value);
-    return addslashes(file_get_contents($filepath));
+  function isvalid($value) {
+    // Bit of a kludge
+    if ($value == "{$this->name}.png") {
+      return true;
+    }
+    return parent::isvalid($value);
   }
   
-  function SQLForm() {
-    $imgdetails = getimagesize($this->filepath($this->value));
-    $mime_type = $imgdetails['mime'];
   
-    return "`{$this->id}_name` = '$this->value', `{$this->id}_content` = '" . $this->SQLValue() . "', `{$this->id}_type` = '{$mime_type}', `{$this->id}_size` = '" . addslashes($imgdetails[3]) . "'";
+  function parseValue($source=NULL) {
+    if ($source == NULL) { $source = $_POST; }
+    $input = $this->input;
+    if (($this->store == 'sql') && ($source != $_POST)) {
+      $this->value = "{$this->name}.png";
+      $valid = array_key_exists($input, $source);
+      if ($valid) {
+        $this->img = $source[$input];
+      }
+      return $this->valid = $valid;
+    }
+    $valid = parent::parseValue($source);
+    if ($valid) {
+      $filepath = $this->filepath($this->value);
+      $this->img = file_get_contents($filepath);
+    }
+    return $valid;
   }
 
+  function SQLType() {
+    return "LONGBLOB";
+  }
+  
+  function SQLValue() {
+    if ($this->hasvalue()) {
+      // Really must use prepared statement!
+      return "'" . addslashes($this->img) . "'";
+    } else {
+      return "DEFAULT";
+    }
+  }
 }
 ?>

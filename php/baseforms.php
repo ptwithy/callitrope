@@ -151,6 +151,8 @@ class Form {
   var $usedivs;
   // Error array from parsing
   var $errorMessages;
+  // Whether the form is complete or not
+  var $complete = false;
   
   // Array of fields to auto-add
   var $columns;
@@ -266,7 +268,10 @@ class Form {
   }
 
   function field($fieldName, $instance=NULL) {
-    return $this->fields[$fieldName . ($instance == NULL ? '' : $instance) ];
+    $name = $fieldName . ($instance == NULL ? '' : $instance);
+    if (array_key_exists($name, $this->fields)) {
+      return $this->fields[$name];
+    }
   }
 
   function fieldHasValue($fieldName, $instance=NULL) {
@@ -536,6 +541,7 @@ QUOTE;
     if ($validate) {
       $this->errorMessages = $errors;
     }
+    $this->complete = $ok;
     return $ok;
   }
 
