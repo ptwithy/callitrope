@@ -159,7 +159,10 @@ class Form {
     if ($columns != null) {
       $this->columns = $columns;
     }
-    foreach ($this->columns as $col) {
+    foreach ($this->columns as $col => $desc) {
+      if ($debugging > 1) {
+        echo "<pre>{$col} => " . print_r($desc) . "<pre>";
+      }
       if (array_key_exists($col, $this->enums)) {
         $e = $this->enums[$col];
         if (array_key_exists(0, $e)) {
@@ -302,6 +305,7 @@ class Form {
   }
 
   // Returns a string representing the HTML version of the form
+  // enctype="multipart/form-data" required to allow file uploads (for FileFormField)
   function HTMLForm($process=1, $buttons=null) {
     if (! $buttons) {
       $buttons =
@@ -332,7 +336,7 @@ QUOTE;
     $html .=
 <<<QUOTE
 
-  <form class="{$this->name}" name="{$this->name}" method="{$this->method}" action="{$this->action}">
+  <form class="{$this->name}" name="{$this->name}" method="{$this->method}" action="{$this->action}" enctype="multipart/form-data">
 QUOTE;
     $html .= $this->HTMLFormTable();
     $html .=
@@ -561,7 +565,7 @@ class DatabaseForm extends Form {
   var $database;
   var $table;
   
-  function DatabaseForm($database, $table, $options=Array(name => null, action => "", method => "post", usedivs => false)) {
+  function DatabaseForm($database, $table, $options=Array('name' => null, 'action' => "", 'method' => "post", 'usedivs' => false)) {
     parent::Form($options['name'] ? $options['name'] : $table, $options['action'], $options['method'], $options['usedivs']);
     $this->database = $database;
     $this->table = $table;
@@ -603,7 +607,7 @@ class DatabaseForm extends Form {
   }
     
   // Insert the values into the table
-  function SQLInsert($additional = null, $options=Array(section => null, fields => null, table => null, database => null)) {
+  function SQLInsert($additional = null, $options=Array('section' => null, 'fields' => null, 'table' => null, 'database' => null)) {
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
     $sql = "INSERT INTO " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
@@ -615,7 +619,7 @@ class DatabaseForm extends Form {
   }
 
   // Update an entry in the table
-  function SQLUpdate($additional = null, $options=Array(section => null, fields => null, table => null, database => null)) {
+  function SQLUpdate($additional = null, $options=Array('section' => null, 'fields' => null, 'table' => null, 'database' => null)) {
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
     $sql = "REPLACE " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
@@ -627,7 +631,7 @@ class DatabaseForm extends Form {
   }
 
   // Delete an entry from the table
-  function SQLDelete($options=Array(table => null, database => null, idname => "id")) {
+  function SQLDelete($options=Array('table' => null, 'database' => null, 'idname' => "id")) {
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
     $idname = $options['id'] ? $options['id'] : "id";
@@ -636,10 +640,10 @@ class DatabaseForm extends Form {
   }
   
   // Fetch values from the table
-  function SQLSelect($id, $additional = null, $options=Array(section => null, fields => null, table => null, database => null, idname => "id")) {
+  function SQLSelect($id, $additional = null, $options=Array('section' => null, 'fields' => null, 'table' => null, 'database' => null, 'idname' => "id")) {
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
-    $idname = $options['id'] ? $options['id'] : "id";
+    $idname = $options['idname'] ? $options['idname'] : "id";
     $sql = "SELECT " . $this->SQLFields($options['section'], $options['fields']) . " FROM " . $table . " WHERE {$idname} = " . PHPtoSQL($id);
     
     if ($additional) {
@@ -729,10 +733,10 @@ class FormField {
   
   function setForm($form) {
     $this->form = $form;
-    if ($this->columns) {
-      $descriptor = $this->columns[$this->id];
+    if ($this->maxlength == NULL && $form->columns && array_key_exists($this->id, $form->columns)) {
+      $descriptor = $form->columns[$this->id];
       if ($descriptor) {
-        if (preg_match("VARCHAR\((\d*)\)", $descriptor->type, $regs)) {
+        if (preg_match("/VARCHAR\\((\\d*)\\)/", $descriptor->Type, $regs)) {
           $this->maxlength = 0 + $regs[1];
         }
       }

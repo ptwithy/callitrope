@@ -347,7 +347,7 @@ function columns_of_table($db, $table) {
     $query = mysql_query($selector, $db) or ode();
     $columns = array();
     while ($row = mysql_fetch_object($query)) {
-        $columns[$row->field] = $row;
+        $columns[$row->Field] = $row;
     }
     return $columns;
 }
