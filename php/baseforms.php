@@ -69,50 +69,58 @@ function fieldInternal($name, $description=null, $type=null, $optional=false, $o
     }
   }
   if ($description == null) { $description = ucwords(str_replace("_", " ", $name)); }
-  $annotation = $options["annotation"];
-  $instance = $options["instance"];
+  $annotation = ($options && array_key_exists('annotation', $options)) ? $options['annotation'] : "";
+  $instance = ($options && array_key_exists('instance', $options)) ? $options['instance'] : "";
+  $priority = ($options && array_key_exists('priority', $options)) ? $options['priority'] : "";
   
   switch ($type) {
     case "email":
-      return new EmailFormField($name, $description, $optional, $annotation, $instance);
+      return new EmailFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "number":
-      return new NumberFormField($name, $description, $options["min"], $options["max"], $options["step"], $optional, $annotation, $instance);
+      return new NumberFormField($name, $description, $options["min"], $options["max"], $options["step"], $optional, $annotation, $instance, $priority);
     case "state":
-      return new StateFormField($name, $description, $optional, $annotation, $instance);
+      return new StateFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "zip":
-      return new ZipFormField($name, $description, $optional, $annotation, $instance);
+      return new ZipFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "postal":
-      return new PostalCodeFormField($name, $description, $optional, $annotation, $instance);
+      return new PostalCodeFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "country":
-      return new CountryFormField($name, $description, $optional, $annotation, $instance);
+      return new CountryFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "phone":
     case "cell":
-      return new PhoneFormField($name, $description, $optional, $annotation, $instance);
+      return new PhoneFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "date":
-      return new DateFormField($name, $description, $optional, $annotation, $instance);
+      return new DateFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "birth":
     case "birthdate":
-      return new BirthdateFormField($name, $description, $optional, $annotation, $instance);
+      return new BirthdateFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "daytime":
-      return new DaytimeFormField($name, $description, $optional, $annotation, $instance);
+      return new DaytimeFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "text":
     case "area":
     case "textarea":
-      return new TextAreaFormField($name, $description, $optional, $annotation, $instance);
+      return new TextAreaFormField($name, $description, $optional, $annotation, $instance, $priority);
     case "button":
     case "radio":
     case "radiobutton":
     case "choice":
     case "single":
-      return new RadioFormField($name, $description, $options["choices"], $optional, $annotation, $instance);
+      return new RadioFormField($name, $description, $options["choices"], $optional, $annotation, $instance, $priority);
     case "check":
     case "checkbox":
     case "multiple":
-      return new CheckboxFormField($name, $description, $options["choices"], $optional, $annotation, $instance);
+      return new CheckboxFormField($name, $description, $options["choices"], $optional, $annotation, $instance, $priority);
     case "menu":
-      return new MenuFormField($name, $description, $options["choices"], $optional, $annotation, $instance);
+      return new MenuFormField($name, $description, $options["choices"], $optional, $annotation, $instance, $priority);
+
+    case "file":
+      return new FileFormField($name, $description, $optional, $annotation, $instance, $priority, $options);
+    case "image":
+    case "picture":
+      return new ImageFormField($name, $description, $optional, $annotation, $instance, $priority, $options);
+
     default:
-      return new FormField($name, $description, $optional, $annotation, $instance);
+      return new FormField($name, $description, $optional, $annotation, $instance, $priority);
   }
 }
 
@@ -230,6 +238,13 @@ class Form {
     $this->fields = array();
     $this->sections = array();
     $this->startSection($name);
+  }
+  
+  // Initialize the form
+  //
+  // Must be called before any headers are output
+  // Currently only used by DatabaseForm
+  function initialize() {
   }
 
   // Takes a string that will be inserted into the table as a footer
@@ -594,6 +609,100 @@ class DatabaseForm extends Form {
       $enums[$field] = $choices;
     }
     $this->enums = $enums;
+  }
+  
+  var $recordID = NULL;
+  
+  // Handles all parsing, etc.
+  function initialize() {
+    global $debugging;
+    parent::initialize();  
+    if ($debugging > 2) {
+      echo "<pre>self: ";
+      print_r($_SERVER['PHP_SELF']);
+      echo "\n\$_GET: ";
+      print_r($_GET);
+      echo "\$_POST: ";
+      print_r($_POST);
+      echo "\$_FILES: ";
+      print_r($_FILES);
+      echo "</pre>";
+    }
+  
+    /**
+     * For editing, if we have an ID, add that as a non-editable field
+     * For the purposes of loading from the database, or refreshing (Cancel) we grab the id 
+     * directly
+     * TODO: The idname is a parameter of the form?
+     */
+    $this->recordID = NULL;
+    if ((array_key_exists('id', $_GET) && $this->recordID = clean($_GET['id'])) ||
+        (array_key_exists('id', $_POST) && $this->recordID = clean($_POST['id']))) {
+        $idfield = new NumberFormField("id", "ID");
+        $idfield->setReadonly(true);
+        $this->addField($idfield);
+    }
+
+    ///
+    // Handle validation, insertion into database, and acknowledgement
+    //
+    if (array_key_exists('process', $_POST) && $_POST['process'] == 1) {
+      // If you came here from a cancel button don't try to parse, just reset
+      if (array_key_exists('cancelButton', $_POST) && $_POST['cancelButton'] == 'Revert Entry') {
+        $this->SQLLoad($this->recordID);
+      } else {
+        $submit = array_key_exists('submitButton', $_POST) && $_POST['submitButton'] == 'Submit Form';
+        $delete = array_key_exists('deleteButton', $_POST) && $_POST['deleteButton'] == 'Delete Entry';
+        $update = array_key_exists('updateButton', $_POST) && $_POST['updateButton'] == 'Update Entry';
+        // Only validate if the user pushed a button, not for refresh
+        if ($this->parseValues(null, $submit || $delete || $update)) {
+          // We got a valid form!
+          if ($submit) {
+            // Create a new entry
+            $id = $this->SQLInsert();
+            if ($id) {
+              // Now fetch the record you just inserted, so you can edit it
+              header("Location: {$this->action}?id=" . urlencode($id));
+              exit;
+            }        
+          } else if ($delete) {
+            // Delete the entry
+            $deleted = $this->SQLDelete(); 
+            if ($deleted) {
+              // Go back to an empty form
+              header("Location: {$this->action}");
+              exit;
+            }        
+          } else if ($update) {
+            // Update the entry
+            $this->SQLUpdate();
+          } else {
+            // Just fall through, without any modifications to the database
+          }
+        }
+      }
+      // Otherwise, we fall through and re-display the form, with any
+      // errors highlighted
+    } else if (array_key_exists('id', $_GET) && $this->recordID) {
+      // If you came here from a GET, load the form from the database
+      $this->SQLLoad($this->recordID);
+    }
+  }
+  
+  // Special behavior for database-backed forms
+  // TODO: Generate a 1-time process value to avoid re-submits
+  function HTMLForm($process=1, $buttons=null) {
+    if ($this->recordID) {
+      // If we have an id, we want update/revert/delete
+      $buttons = <<<QUOTE
+      <input type="submit" name="updateButton" value="Update Entry">&nbsp;&nbsp;
+      <input type="submit" name="cancelButton" value="Revert Entry">&nbsp;&nbsp;
+      <input class="submit" onclick="return confirm('Are you sure you want to delete this entry?')"  type="submit"  name="deleteButton" value="Delete Entry">
+QUOTE;
+      // and we want to come back to the id
+      $this->action = $_SERVER['PHP_SELF'] . "?id=" . urlencode($this->recordID);
+    }
+    return parent::HTMLForm($process, $buttons);
   }
 
   // Make the query, report any errors
