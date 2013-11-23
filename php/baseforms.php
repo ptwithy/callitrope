@@ -530,12 +530,16 @@ QUOTE;
       // Stop if there are errors and you hit a new priority level
       if ((! $ok) && ($field->priority != $current)) { break; }
       $current = $field->priority;
-      if ($field->parseValue($source)) {
-        // All good
-      } else {
-        // Bzzt!
-        $ok = false;
-        array_push($errors, $field->errorMessage());
+      // This allows you to have a dynamic form -- we won't check
+      // fields that didn't get posted.
+      if ($field->isPresent($source)) {
+        if ($field->parseValue($source)) {
+          // All good
+        } else {
+          // Bzzt!
+          $ok = false;
+          array_push($errors, $field->errorMessage());
+        }
       }
     }
     if ($validate) {
@@ -621,28 +625,31 @@ class DatabaseForm extends Form {
       $sql .= ", ";
       $sql .= $additional;
     }
-    return $this->SQLExecuteQuery($sql, $database);
+    return $this->SQLExecuteQuery($sql, $database) ? mysql_insert_id($database) : false;
   }
 
   // Update an entry in the table
-  function SQLUpdate($additional = null, $options=Array('section' => null, 'fields' => null, 'table' => null, 'database' => null)) {
+  function SQLUpdate($additional = null, $options=Array('section' => null, 'fields' => null, 'table' => null, 'database' => null, 'idname' => "id")) {
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
-    $sql = "REPLACE " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
+    $idname = $options['idname'] ? $options['idname'] : "id";
+    $id = $this->fieldValue($idname);
+    $sql = "UPDATE " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']). " WHERE " . $this->field($idname)->SQLForm();
     if ($additional) {
       $sql .= ", ";
       $sql .= $additional;
     }
-    return $this->SQLExecuteQuery($sql, $database);
+    return $this->SQLExecuteQuery($sql, $database) ? $id : false;
   }
 
   // Delete an entry from the table
   function SQLDelete($options=Array('table' => null, 'database' => null, 'idname' => "id")) {
     $database = $options['database'] ? $options['database'] : $this->database;
     $table = $options['table'] ? $options['table'] : $this->table;
-    $idname = $options['id'] ? $options['id'] : "id";
-    $sql = "DELETE FROM " . $table . " WHERE " . $this->field($idname)->SQLForm();
-    return $this->SQLExecuteQuery($sql, $database);
+    $idname = $options['idname'] ? $options['idname'] : "id";
+    $id = $this->fieldValue($idname);
+  $sql = "DELETE FROM " . $table . " WHERE " . $this->field($idname)->SQLForm();
+    return $this->SQLExecuteQuery($sql, $database) ? $id : false;
   }
   
   // Fetch values from the table
@@ -658,7 +665,19 @@ class DatabaseForm extends Form {
     }
     return $this->SQLExecuteQuery($sql, $database);
   }
-
+  
+  // Load the form from the table
+  function SQLLoad($id, $options=Array('section' => null, 'fields' => null, 'table' => null, 'database' => null, 'idname' => "id")) {
+    $result = $this->SQLSelect($id, null, $options);
+    $source = mysql_fetch_array($result);
+    return $source ? $this->parseValues($source) : false;
+  }
+  
+  // Reset the form from the table
+  function SQLRevert($options=Array('section' => null, 'fields' => null, 'table' => null, 'database' => null, 'idname' => "id")) {
+    $idname = $options['idname'] ? $options['idname'] : "id";
+    return $this->SQLLoad($this->fieldValue($idname));
+  }
 }  
 
 ///
@@ -807,19 +826,18 @@ class FormField {
     }
   }
 
+  // This allows you to have a dynamic form -- we won't check
+  // fields that didn't get posted.
+  function isPresent($source) {
+    return (array_key_exists($this->input, $source));
+  }  
 
   // Gets a value for this field from the posted form data.  Verifies
   // that it is valid, and stores the canonical value.  Returns a
   // boolean indicating whether or not a valid value was given.
   // @param source:Array array of values, indexed by field
   // name, to parse the value from
-  function parseValue($source=NULL) {
-    if ($source == NULL) { $source = $_POST; }
-    // This allows you to have a dynamic form -- we won't check
-    // fields that didn't get posted.
-    if (! array_key_exists($this->input, $source)) {
-      return true;
-    }
+  function parseValue($source) {
     $v = $source[$this->input];
     // If the posted value is valid, store it
     $this->setValue($v);

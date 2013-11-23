@@ -26,14 +26,6 @@ class FileFormField extends PatternFormField {
   }
 
   function HTMLTableColumn() {
-    // Once a file has been uploaded, we just display the filename
-    // The user can choose a different file by erasing the filename
-    if ($this->isvalid($this->value)) {
-      $this->type = 'text';
-      $this->readonly = 'true';
-    } else {
-      $this->type = 'file';
-    }
     $element =
 <<<QUOTE
 
@@ -60,11 +52,14 @@ QUOTE;
     switch (true) {
       case (! parent::isvalid($value)):
         $this->error = "File name must be short and simple.";
+        if ($debugging) {
+          $this->error .= "[" . $value . "]";
+        }
         return false;
       case (! is_readable($this->filepath($value))):
         $this->error = "File inaccessible";
         if ($debugging) {
-          $this->error .= ": " . $this->filepath($value);
+          $this->error .= "[" . $this->filepath($value) . "]";
         }
         return false;
       default:
@@ -81,6 +76,10 @@ QUOTE;
     return $_SERVER['DOCUMENT_ROOT'] . $this->webpath($filename);
   }
   
+  function dirpath() {
+    return $this->filepath("");
+  }
+  
   function validType($tempname) {
     return true;
   }
@@ -89,17 +88,35 @@ QUOTE;
     return move_uploaded_file($tempname, $filepath);
   }
   
-  // Implements "parsing" for an uploaded file
-  function parseValue($source=NULL) {
+  function uploading($source) {
+    $input = $this->input;
+    // We are only uploading if we actually got a file
+    if (($source == $_POST) &&
+        array_key_exists($input, $_FILES) &&
+        array_key_exists('tmp_name', $_FILES[$input]) &&
+        (! empty($_FILES[$input]['tmp_name']))) {
+      return true;
+    }
+    return false;
+  }
+
+  function isPresent($source) {
     global $debugging;
-    if ($source == NULL) { $source = $_POST; }
+    $uploading = $this->uploading($source);
+    if ($debugging > 2) {
+      echo "<pre>uploading: {$uploading} </pre>";
+    }
+    return ($uploading || parent::isPresent($source));
+  }
+  
+  // Implements "parsing" for an uploaded file
+  function parseValue($source) {
+    global $debugging;
     $filename = '';
     $valid = false;
     $input = $this->input;
-    $uploading = ($source == $_POST && array_key_exists($input, $_FILES));
+    $uploading = $this->uploading($source);
     if ($uploading) {
-      // We are coming from a posted form
-      // which uploaded a file
       $filename = $_FILES[$input]['name'];
     } else if (array_key_exists($input, $source)) {
       $filename = $source[$input];
@@ -114,13 +131,13 @@ QUOTE;
           case ($_FILES[$input]["error"] != 'UPLOAD_ERROR_OK'):
             $this->error = "Error uploading";
             if ($debugging) {
-              $this->error .= ": " . $_FILES[$input]["error"];
+              $this->error .= "[" . $_FILES[$input]["error"] . "]";
             }
             break;
           case (! is_uploaded_file($tempname)):
             $this->error = "Invalid file";
             if ($debugging) {
-              $this->error .= ": " . $tempname;
+              $this->error .= "[" . $tempname . "]";
             }
             break;
           case (! $this->validType($tempname)):
@@ -129,20 +146,20 @@ QUOTE;
           case ($size < 0 || $size > $this->maxsize):
             $this->error = "File must be less than {$this->maxsize} bytes.";
             if ($debugging) {
-              $this->error .= ": " . $size;
+              $this->error .= "[" . $size . "]";
             }
             break;
-          case (!is_writable($this->filepath(""))):
+          case (!is_writable($this->dirpath())):
             $this->error = "Directory inaccessible";
             if ($debugging) {
-              $this->error .= ": " . $this->filepath("");
+              $this->error .= "[" . $this->filepath("") . "]";
             }
             break;
           // Try to move it
           case (! $this->moveFile($tempname, $filepath)):
             $this->error = "Error moving";
             if ($debugging) {
-              $this->error .= ": " . $tempname . " => " . $filepath;
+              $this->error .= "[" . $tempname . " => " . $filepath . "]";
             }
             break;
           default:
@@ -165,10 +182,12 @@ class ImageFormField extends FileFormField {
   var $store;
   var $width;
   var $height;
+  var $idname = 'id';
   var $img;
+  var $info;
   
   function ImageFormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0,
-                          $options=array('directory' => 'images', 'maxsize' => 8388608, 'store' => NULL, 'width' => NULL, 'height' => NULL)) {
+                          $options=array('directory' => 'images', 'maxsize' => 8388608, 'store' => NULL, 'width' => NULL, 'height' => NULL, 'idname' => NULL)) {
     parent::FileFormField($name, $description, $optional, $annotation, $instance, $priority, $options);
     if (array_key_exists('store', $options)) {
        $this->store = $options['store'];
@@ -179,8 +198,13 @@ class ImageFormField extends FileFormField {
     if (array_key_exists('height', $options)) {
       $this->height = $options['height'];
     }
+    if (array_key_exists('idname', $options)) {
+      $this->idname = $options['idname'];
+    }
 
     $this->title = "image";
+    // This lets us refresh the form with the chosen image
+    $this->autosubmit = true;
   }
 
   function setForm($form) {
@@ -194,32 +218,58 @@ class ImageFormField extends FileFormField {
     }
   }
 
-  function HTMLTableColumn() {
-    $element = parent::HTMLTableColumn();
-    // Can't use $this->valid as the form starts out valid
+  function HTMLFormElement() {
     if ($this->isvalid($this->value)) {
-      switch (true) {
-        case ($this->store == 'sql' && $this->form->fieldHasValue('id')):
-          $id = urlencode($this->form->fieldValue('id'));
-          $element .=
+      $info = $this->info;
+      // get all the attributes we would normally give the input field
+      $additional = $this->additionalInputAttributes();
+      // We have an invisible form element that will repost the value (filename)
+      // Then a file button that is transparent and overlays the image
+      // so the user can click to replace the image
+      // then the image itself
+      //
+      // See http://www.quirksmode.org/dom/inputfile.html
+      $element =
 <<<QUOTE
 
-        <img src='fetchasset.php5?&i={$id}' />
+          <!-- Ensures our value is returned to us -->
+          <input type="hidden" name="{$this->input}" id="{$this->id}_hidden" value="{$this->value}">
+          <div style="
+            position: relative;
+          ">
+            <!-- Invisible file button ovelays the image -->
+            <input
+              name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$this->value}"
+              onmouseover="{this.title = 'click to edit'; this.style.cursor = 'pointer'}"
+              onchange="document.forms[0].submit()"
+              style="
+                position: relative;
+                text-align: right;
+                -moz-opacity:0 ;
+                filter:alpha(opacity: 0);
+                opacity: 0;
+                z-index: 2;
+                width: {$info['width']}px; height: {$info['height']}px;
+              "
+            />
+            <div
+              style="
+                position: absolute;
+                top: 0px;
+                left: 0px;
+                z-index: 1;
+              "
+            >
 QUOTE;
-          break;
-        case ($this->store == 'file'):
-        // sql that has not yet been stored
-        default:
-          $webpath = $this->webpath($this->value);
-          $element .=
-<<<QUOTE
-
-        <img src='{$webpath}' />
+      $element .= $this->HTMLValue();
+      $element .= <<<QUOTE
+            </div>
+          </div>
 QUOTE;
-          break;
-      }
+      return $element;
     }
-    return $element;
+    // If there is no image yet, just 
+    return parent::HTMLFormElement();
   }
   
   function validType($tempname) {
@@ -283,36 +333,79 @@ QUOTE;
     return $result;
   }
   
-  function isvalid($value) {
-    // Bit of a kludge
-    if ($value == "{$this->name}.png") {
-      return true;
+  function setImage($string, $create=false) {
+    $this->img = $string;
+    // Get info about image -- wish we had `getimagesizefromstring` not available until PHP 5.2
+    $img = imagecreatefromstring($string);
+    $this->info = array(
+      'width' => imagesx($img)
+      ,'height' => imagesy($img));
+    if ($create) {
+      imagepng($img, $this->filepath($this->value));
     }
-    return parent::isvalid($value);
+    imagedestroy($img);
   }
   
-  
   function parseValue($source=NULL) {
+    global $debugging;
     if ($source == NULL) { $source = $_POST; }
     $input = $this->input;
-    if (($this->store == 'sql') && ($source != $_POST)) {
-      $this->value = "{$this->name}.png";
-      $valid = array_key_exists($input, $source);
-      if ($valid) {
-        $this->img = $source[$input];
-      }
-      return $this->valid = $valid;
+    if ($debugging > 2) {
+      echo "<pre>source: "; print_r($source); echo "</pre>";
+      echo "<pre>array_key_exists(\$input, \$source): ". (array_key_exists($input, $source) ? 'true' : 'false') . "</pre>";
+    }
+    if (($this->store == 'sql') && ($source != $_POST) && array_key_exists($input, $source)) {
+      // If we are coming from SQL, put the image in a temp file so the
+      // rest of the code works 'normally'
+      $tempfile = tempnam($this->dirpath(), $input);
+      // We don't want that file, unless we have a valid image
+      unlink($tempfile);
+      $this->value = basename($tempfile);
+      $this->setImage($source[$input], true);
+      return $this->valid = true;
     }
     $valid = parent::parseValue($source);
+    if ($debugging > 2) {
+      echo "<pre>valid: {$valid}; value: {$this->value}</pre>";
+    }
     if ($valid) {
       $filepath = $this->filepath($this->value);
-      $this->img = file_get_contents($filepath);
+      $this->setImage(file_get_contents($filepath), false);
     }
     return $valid;
   }
 
   function SQLType() {
     return "LONGBLOB";
+  }
+
+  function HTMLValue() {
+    // Can't use $this->valid as the form starts out valid
+    $value = parent::HTMLValue();
+    if ($this->isvalid($this->value)) {
+      switch (true) {
+        // This should never happen, as we always parse the sql and save it out as a temp file
+        // to make the rest of the code work -- really just here as an example of how to access
+        // an image from SQL
+        case ((! is_readable($this->filepath($this->value))) && $this->store == 'sql' && $this->form->fieldHasValue($this->idname)):
+          $id = urlencode($this->form->fieldValue($this->idname));
+          $value = <<<QUOTE
+
+        <img id="{$this->id}" src='fetchasset.php5?&i={$id}' />
+QUOTE;
+          break;
+        case ($this->store == 'file'):
+        // sql that has not yet been stored
+        default:
+          $webpath = $this->webpath($this->value);
+          $value = <<<QUOTE
+
+        <img id='{$this->id}' src='{$webpath}' />
+QUOTE;
+          break;
+      }
+    }
+    return $value;
   }
   
   function SQLValue() {
