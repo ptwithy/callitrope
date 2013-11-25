@@ -45,6 +45,23 @@ QUOTE;
     return $message;
   }
   
+  function contentAccess() {
+    global $debugging;
+    if (is_readable($this->filepath($this->value))) {
+      return 'file';
+    } else {
+      return NULL;
+    }
+  }
+
+  function contentAccessValid() {
+    switch ($this->contentAccess()) {
+      case 'file':
+        return true;
+      default:
+        return false;
+    }
+  }
   
   // Tests if a value is valid for this field
   function isvalid($value) {
@@ -56,8 +73,8 @@ QUOTE;
           $this->error .= "[" . $value . "]";
         }
         return false;
-      case (! is_readable($this->filepath($value))):
-        $this->error = "File inaccessible";
+      case (! $this->contentAccessValid()):
+        $this->error = "Content inaccessible";
         if ($debugging) {
           $this->error .= "[" . $this->filepath($value) . "]";
         }
@@ -152,7 +169,7 @@ QUOTE;
           case (!is_writable($this->dirpath())):
             $this->error = "Directory inaccessible";
             if ($debugging) {
-              $this->error .= "[" . $this->filepath("") . "]";
+              $this->error .= "[" . $this->dirpath() . "]";
             }
             break;
           // Try to move it
@@ -184,6 +201,7 @@ class ImageFormField extends FileFormField {
   var $height;
   var $idname = 'id';
   var $img;
+  var $path;
   var $info;
   
   function ImageFormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0,
@@ -219,7 +237,12 @@ class ImageFormField extends FileFormField {
   }
 
   function HTMLFormElement() {
-    if ($this->isvalid($this->value)) {
+    global $debugging;
+    $valid = $this->isvalid($this->value);
+    if ($debugging > 1) {
+      echo "<pre>valid: {$valid}; value: {$this->value}; path: {$this->path}</pre>";
+    }
+    if ($valid) {
       $info = $this->info;
       // get all the attributes we would normally give the input field
       $additional = $this->additionalInputAttributes();
@@ -288,6 +311,26 @@ QUOTE;
     }
     return true;
   }
+  function contentAccess() {
+    global $debugging;
+    $access = parent::contentAccess();
+    if ($access != NULL) {
+      return $access;
+    } else if ($this->store == 'sql') {
+      return 'sql';
+    } else {
+      return NULL;
+    }
+  }
+
+  function contentAccessValid() {
+    switch ($this->contentAccess()) {
+      case 'sql':
+        return true;
+      default:
+        return parent::contentAccessValid();
+    }
+  }
 
   // Resizes the file before moving it if width/height are set
   function moveFile($tempname, $filepath) {
@@ -333,46 +376,70 @@ QUOTE;
     return $result;
   }
   
-  function setImage($string, $create=false) {
-    $this->img = $string;
+  function setImage($string) {
+    // delete any previous
+    $this->clearImage();
+    $_SESSION[$this->id] = $this->img = $string;
     // Get info about image -- wish we had `getimagesizefromstring` not available until PHP 5.2
     $img = imagecreatefromstring($string);
     $this->info = array(
       'width' => imagesx($img)
       ,'height' => imagesy($img));
-    if ($create) {
-      imagepng($img, $this->filepath($this->value));
-    }
+    $this->path = $this->filepath($this->value);
     imagedestroy($img);
   }
   
-  function parseValue($source=NULL) {
+  function clearImage() {
+    unset($_SESSION[$this->id]);
+    unset($this->img);
+    unset($this->info);
+    if (isset($this->path) && file_exists($this->path)) {
+      if (! unlink($this->path)) {
+        trigger_error("Could not unlink '{$this->path}'", E_USER_WARNING);
+      }
+    }
+    unset($this->path);
+  }    
+  
+  function parseValue($source) {
     global $debugging;
-    if ($source == NULL) { $source = $_POST; }
     $input = $this->input;
-    if ($debugging > 2) {
-      echo "<pre>source: "; print_r($source); echo "</pre>";
-      echo "<pre>array_key_exists(\$input, \$source): ". (array_key_exists($input, $source) ? 'true' : 'false') . "</pre>";
-    }
-    if (($this->store == 'sql') && ($source != $_POST) && array_key_exists($input, $source)) {
-      // If we are coming from SQL, put the image in a temp file so the
-      // rest of the code works 'normally'
-      $tempfile = tempnam($this->dirpath(), $input);
-      // We don't want that file, unless we have a valid image
-      unlink($tempfile);
-      $this->value = basename($tempfile);
-      $this->setImage($source[$input], true);
-      return $this->valid = true;
-    }
-    $valid = parent::parseValue($source);
+    $valid = parent::parseValue($source) && ($this->contentAccess() == 'file');
     if ($debugging > 2) {
       echo "<pre>valid: {$valid}; value: {$this->value}</pre>";
     }
     if ($valid) {
       $filepath = $this->filepath($this->value);
-      $this->setImage(file_get_contents($filepath), false);
+      $this->setImage(file_get_contents($filepath));
+      return $this->valid = $valid;
     }
-    return $valid;
+    if ($debugging > 2) {
+      echo "<pre>source: "; print_r($source); echo "</pre>";
+    }
+    if ($debugging > 1) {
+      echo "<pre>uploading: " . ($this->uploading($source) ? 'true' : 'false') . "</pre>";
+      echo "<pre>array_key_exists(\$input, \$source): ". (array_key_exists($input, $source) ? 'true' : 'false') . "</pre>";
+      echo "<pre>isset(\$this->id, \$_SESSION): ". (isset($this->id, $_SESSION) ? 'true' : 'false') . "</pre>";
+    }
+    if ($this->contentAccess() == 'sql') {
+      if (($source != $_POST) && array_key_exists($input, $source)) {
+        $this->value = 'sql';
+        $this->setImage($source[$input]);
+        return $this->valid = true;
+      }
+      if (isset($_SESSION[$this->id])) {
+        $this->value = 'sql';
+        $this->setImage($_SESSION[$this->id]);
+        return $this->valid = true;
+      }
+    }
+    return $this->valid = $valid;
+  }
+  
+  function finalize() {
+    if ($this->store == 'sql') {
+      $this->clearImage();
+    }
   }
 
   function SQLType() {
@@ -383,25 +450,19 @@ QUOTE;
     // Can't use $this->valid as the form starts out valid
     $value = parent::HTMLValue();
     if ($this->isvalid($this->value)) {
-      switch (true) {
+      switch ($this->contentAccess()) {
         // This should never happen, as we always parse the sql and save it out as a temp file
         // to make the rest of the code work -- really just here as an example of how to access
         // an image from SQL
-        case ((! is_readable($this->filepath($this->value))) && $this->store == 'sql' && $this->form->fieldHasValue($this->idname)):
+        case 'sql':
           $id = urlencode($this->form->fieldValue($this->idname));
-          $value = <<<QUOTE
-
-        <img id="{$this->id}" src='fetchasset.php5?&i={$id}' />
-QUOTE;
+          $value = "<img id='{$this->id}' src='fetchasset.php5?&i={$id}' />";
           break;
-        case ($this->store == 'file'):
+        case 'file':
         // sql that has not yet been stored
         default:
           $webpath = $this->webpath($this->value);
-          $value = <<<QUOTE
-
-        <img id='{$this->id}' src='{$webpath}' />
-QUOTE;
+          $value = "<img id='{$this->id}' src='{$webpath}' />";
           break;
       }
     }
