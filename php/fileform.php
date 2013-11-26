@@ -14,10 +14,12 @@ class FileFormField extends PatternFormField {
   // @param directory:String (optional) Name of the directory files
   // should be uploaded to
   function FileFormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0,
-                          $options=array('directory' => 'files', 'maxsize' => 8388608)) {
+                          $options=NULL) {
+    $defaultoptions = array('directory' => 'files', 'maxsize' => 8388608);
+    $options = $options ? array_merge($defaultoptions, $options) : $options;
     parent::PatternFormField($name, $description, $optional, $annotation, $instance=NULL, $priority=0);
-    $this->directory = array_key_exists('directory', $options) ? $options['directory'] : 'files';
-    $this->maxsize = array_key_exists('maxsize', $options) ? $options['maxsize'] : 8388608;;
+    $this->directory = $options['directory'];
+    $this->maxsize = $options['maxsize'];
     $this->type = "file";
     $this->title = "file";
     $this->placeholder = "file.ext";
@@ -30,6 +32,8 @@ class FileFormField extends PatternFormField {
 <<<QUOTE
 
       <input type="hidden" name="MAX_FILE_SIZE" value="{$this->maxsize}">
+      <!-- Ensures our value is returned to us -->
+      <input type="hidden" name="{$this->input}" id="{$this->id}_hidden" value="{$this->value}">
 QUOTE;
     // For unknown reasons, the MAX_FILE_SIZE input has to come first
     $element .= parent::HTMLTableColumn();
@@ -117,6 +121,8 @@ QUOTE;
     return false;
   }
 
+  // This allows you to have a dynamic form -- we won't check
+  // fields that didn't get posted.
   function isPresent($source) {
     global $debugging;
     $uploading = $this->uploading($source);
@@ -199,26 +205,20 @@ class ImageFormField extends FileFormField {
   var $store;
   var $width;
   var $height;
-  var $idname = 'id';
+  var $idname;
   var $img;
   var $path;
   var $info;
   
   function ImageFormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0,
-                          $options=array('directory' => 'images', 'maxsize' => 8388608, 'store' => NULL, 'width' => NULL, 'height' => NULL, 'idname' => NULL)) {
+                          $options=NULL) {
+    $defaultoptions = array('directory' => 'images', 'store' => NULL, 'width' => NULL, 'height' => NULL, 'idname' => 'id');
+    $options = $options ? array_merge($defaultoptions, $options) : $options;
     parent::FileFormField($name, $description, $optional, $annotation, $instance, $priority, $options);
-    if (array_key_exists('store', $options)) {
-       $this->store = $options['store'];
-    }
-    if (array_key_exists('width', $options)) {
-      $this->width = $options['width'];
-    }
-    if (array_key_exists('height', $options)) {
-      $this->height = $options['height'];
-    }
-    if (array_key_exists('idname', $options)) {
-      $this->idname = $options['idname'];
-    }
+    $this->store = $options['store'];
+    $this->width = $options['width'];
+    $this->height = $options['height'];
+    $this->idname = $options['idname'];
 
     $this->title = "image";
     // This lets us refresh the form with the chosen image
@@ -421,8 +421,8 @@ QUOTE;
       echo "<pre>array_key_exists(\$input, \$source): ". (array_key_exists($input, $source) ? 'true' : 'false') . "</pre>";
       echo "<pre>isset(\$this->id, \$_SESSION): ". (isset($this->id, $_SESSION) ? 'true' : 'false') . "</pre>";
     }
-    if ($this->contentAccess() == 'sql') {
-      if (($source != $_POST) && array_key_exists($input, $source)) {
+    if (($this->contentAccess() == 'sql') && (! $this->uploading($source))) {
+      if (($source != $_POST) && isset($source[$input])) {
         $this->value = 'sql';
         $this->setImage($source[$input]);
         return $this->valid = true;
@@ -451,15 +451,11 @@ QUOTE;
     $value = parent::HTMLValue();
     if ($this->isvalid($this->value)) {
       switch ($this->contentAccess()) {
-        // This should never happen, as we always parse the sql and save it out as a temp file
-        // to make the rest of the code work -- really just here as an example of how to access
-        // an image from SQL
         case 'sql':
           $id = urlencode($this->form->fieldValue($this->idname));
           $value = "<img id='{$this->id}' src='fetchasset.php5?&i={$id}' />";
           break;
         case 'file':
-        // sql that has not yet been stored
         default:
           $webpath = $this->webpath($this->value);
           $value = "<img id='{$this->id}' src='{$webpath}' />";

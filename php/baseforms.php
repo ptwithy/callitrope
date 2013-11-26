@@ -71,7 +71,7 @@ function fieldInternal($name, $description=null, $type=null, $optional=false, $o
   if ($description == null) { $description = ucwords(str_replace("_", " ", $name)); }
   // default options
   $defaultoptions = array('annotation' => '', 'instance' => NULL, 'priority' => 0, 'choices' => NULL, 'max' => NULL, 'min' => NULL, 'step' => NULL);
-  $options = $options ? array_merge($options, $defaultoptions) : $defaultoptions;
+  $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
 
   $annotation = $options['annotation'];
   $instance = $options['instance'];
@@ -165,6 +165,8 @@ class Form {
   var $errorMessages;
   // Whether the form is complete or not
   var $complete = false;
+  // The auto-generated process token (1 is the back-compatible value, overridden by initialize)
+  var $process = 1;
   
   // Array of fields to auto-add
   var $columns;
@@ -244,9 +246,6 @@ class Form {
     $this->startSection($name);
   }
   
-  // The auto-generated process token
-  var $process;
-  
   // Initialize the form
   //
   // Must be called before any headers are output
@@ -255,7 +254,16 @@ class Form {
     // We need some session variables to track state
     ptw_session_start();
     // Retrieve the process token
-    if (isset($_SESSION['process'])) { $this->process = $_SESSION['process']; }
+    if (isset($_SESSION['process'])) {
+      $this->process = $_SESSION['process'];
+    } else {
+      // First time:  clear the back-compatible value
+      $this->process = NULL;
+    }
+  }
+  
+  function isValidPost() {
+    return array_key_exists('process', $_POST) && ($_POST['process'] == $this->process);
   }
   
   // Give fields a chance to clean up any temporary storage, e.g., files/images
@@ -345,14 +353,19 @@ class Form {
 
   // Returns a string representing the HTML version of the form
   // enctype="multipart/form-data" required to allow file uploads (for FileFormField)
-  function HTMLForm($process=1, $buttons=null) {
+  function HTMLForm($process=null, $buttons=null) {
     // We allow passing in a token, but discourage it
     if ($process == null) {
-      // We generate a new process token every time -- this prevents re-submitting
-      // or forging submissions
-      $process = $_SESSION['process'] = generatePassword();
+      if ($this->process == 1) {
+        // initialize was never called, we are back-compatible mode
+        $process = $this->process;
+      } else {
+        // We generate a new process token every time -- this prevents re-submitting
+        // or forging submissions
+        $process = $_SESSION['process'] = generatePassword();
+      }
     } else {
-      trigger_error("Supplying \$process={$process} is deprecated");
+      if ($debugging) { trigger_error("Supplying \$process={$process} is deprecated"); }
       $_SESSION['process'] = $process;
     }
     
@@ -619,15 +632,18 @@ class MultisectionForm extends Form {
 class DatabaseForm extends Form {
   var $database;
   var $table;
+  // If defined, makes the form editable
   var $idname;
   
-  function DatabaseForm($database, $table, $options=array('name' => null, 'action' => "", 'method' => "post", 'usedivs' => false, 'idname' => "id")) {
+  function DatabaseForm($database, $table, $options=null) {
     // default options
-    $options = array_merge($options, array('name' => null, 'action' => "", 'method' => "post", 'usedivs' => false, 'idname' => "id"));
+    $defaultoptions = array('name' => null, 'action' => "", 'method' => "post", 'usedivs' => false, 'idname' => NULL);
+    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
     parent::Form($options['name'], $options['action'], $options['method'], $options['usedivs']);
     $this->database = $database;
     $this->table = $table;
     $this->idname = $options['idname'];
+    $this->editable = $this->idname != NULL;
     $this->columns = columns_of_table($this->database, $this->table);
     $lookups = lookups_from_table_enums($this->database, $this->table);
     // Invert the maps to match form choices
@@ -646,6 +662,7 @@ class DatabaseForm extends Form {
   }
   
   var $recordID = NULL;
+  var $editable = false;
   
   // Handles all parsing, etc.
   function initialize() {
@@ -673,30 +690,48 @@ class DatabaseForm extends Form {
      * TODO: The idname is a parameter of the form?
      */
     $idname = $this->idname;
+    $editable = $this->editable;
     $this->recordID = NULL;
-    if ((isset($_GET[$idname]) && $this->recordID = clean($_GET[$idname])) ||
-        (isset($_POST[$idname]) && $this->recordID = clean($_POST[$idname]))) {
-        // We special-case 'id' as an acronym
-        $idfield = field($idname, ($idname == 'id' ? 'ID' : NULL), 'number');
-        $idfield->setReadonly(true);
-        $this->addField($idfield);
+    if ($editable) {
+      // Editable form
+      if ((isset($_GET[$idname]) && $this->recordID = clean($_GET[$idname])) ||
+          (isset($_POST[$idname]) && $this->recordID = clean($_POST[$idname]))) {
+          // We special-case 'id' as an acronym
+          $idfield = field($idname, ($idname == 'id' ? 'ID' : NULL), 'number');
+          $idfield->setReadonly(true);
+          $this->addField($idfield);
+      }
     }
+  }
 
+  // Processes the buttons
+  // If non-editable form, returns false on validation errors, returns record ID on successful insert
+  // For editable form, automatically refreshes the form on insert or update
+  // Pass in optional onWhatever to specify a target page on success other than the default
+  function handleButtons($options=null) {
+    $defaultoptions = array('onSubmit' =>  NULL, 'onCancel' => NULL, 'onDelete' => NULL, 'onUpdate' => NULL);
+    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
+    $idname = $this->idname;
+    $editable = $this->editable;
     ///
     // Handle validation, insertion into database, and acknowledgement
     //
-    if (array_key_exists('process', $_POST) && $_POST['process'] == $this->process) {
+    if ($this->isValidPost()) {
       $submit = array_key_exists('submitButton', $_POST) && $_POST['submitButton'] == 'Submit Form';
-      $delete = array_key_exists('deleteButton', $_POST) && $_POST['deleteButton'] == 'Delete Entry';
-      $update = array_key_exists('updateButton', $_POST) && $_POST['updateButton'] == 'Update Entry';
+      $delete = $editable && array_key_exists('deleteButton', $_POST) && $_POST['deleteButton'] == 'Delete Entry';
+      $update = $editable && array_key_exists('updateButton', $_POST) && $_POST['updateButton'] == 'Update Entry';
       // Only validate if the user pushed a button, not for refresh
       $valid = $this->parseValues(null, $submit || $delete || $update);
       // If you came here from a cancel button don't need to validate, but do need to parse to clean up
-      if (array_key_exists('cancelButton', $_POST) && $_POST['cancelButton'] == 'Revert Entry') {
+      if ($editable && array_key_exists('cancelButton', $_POST) && $_POST['cancelButton'] == 'Revert Entry') {
         $this->finalize();
         $id = $this->recordID;
-        // Now fetch the record you just inserted, so you can edit it
-        header("Location: {$this->action}?{$idname}=" . urlencode($id));
+        if ($options['onCancel']) {
+          header($options['onCancel']);
+        } else {
+          // Now fetch the record you just inserted, so you can edit it
+          header("Location: {$this->action}?{$idname}=" . urlencode($id));
+        }
         exit;
       }
       if ($valid) {
@@ -704,15 +739,25 @@ class DatabaseForm extends Form {
         if ($submit) {
           // Create a new entry
           $id = $this->SQLInsert();
-          if ($id) {
-            // Now fetch the record you just inserted, so you can edit it
-            header("Location: {$this->action}?{$idname}=" . urlencode($id));
-            exit;
-          }        
+          if ($id != NULL) {
+            if ($options['onSubmit']) {
+              header($options['onSubmit']);
+              exit;
+            } else if ($editable) {
+              // Now fetch the record you just inserted, so you can edit it
+              header("Location: {$this->action}?{$idname}=" . urlencode($id));
+              exit;
+            }
+          }
+          return $id;
         } else if ($delete) {
           // Delete the entry
           $deleted = $this->SQLDelete(); 
-          if ($deleted) {
+          if ($deleted != NULL) {
+            if ($options['onDelete']) {
+              header($options['onDelete']);
+              exit;
+            }
             // Go back to an empty form
             $parts = explode('?', $this->action, 1);
             $url = $parts[0]; //  http_build_url($this->action, "", HTTP_URL_STRIP_QUERY | HTTP_URL_STRIP_FRAGMENT);
@@ -722,7 +767,11 @@ class DatabaseForm extends Form {
         } else if ($update) {
           // Update the entry
           $id = $this->SQLUpdate();
-          if ($id) {
+          if ($id != NULL) {
+            if ($options['onUpdate']) {
+              header($options['onUpdate']);
+              exit;
+            }
             // Now fetch the record you just updated, so you can edit it
             header("Location: {$this->action}?{$idname}=" . urlencode($id));
             exit;
@@ -731,15 +780,16 @@ class DatabaseForm extends Form {
       }
       // Otherwise, we fall through and re-display the form, with any
       // errors highlighted
-    } else if (isset($_GET[$idname]) && $this->recordID == $_GET[$idname]) {
+    } else if ($editable && isset($_GET[$idname]) && $this->recordID == $_GET[$idname]) {
       // If you came here from a GET, load the form from the database
       $this->SQLLoad($this->recordID);
     }
+    return false;
   }
   
   // Special behavior for database-backed forms
   function HTMLForm($process=null, $buttons=null) {
-    if ($this->recordID) {
+    if ($this->editable && $this->recordID) {
       // If we have an id, we want update/revert/delete
       $buttons = <<<QUOTE
       <input type="submit" name="updateButton" value="Update Entry">&nbsp;&nbsp;
@@ -771,9 +821,10 @@ QUOTE;
   }
     
   // Insert the values into the table
-  function SQLInsert($additional = null, $options=array('section' => null, 'fields' => null, 'table' => null, 'database' => null)) {
+  function SQLInsert($additional = null, $options=NULL) {
     // default options
-    $options = array_merge($options, array('section' => null, 'fields' => null, 'table' => $this->table, 'database' => $this->database));
+    $defaultoptions = array('section' => null, 'fields' => null, 'table' => $this->table, 'database' => $this->database);
+    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
     $database = $options['database'];
     $table = $options['table'];
     $sql = "INSERT INTO " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
@@ -789,9 +840,10 @@ QUOTE;
   }
 
   // Update an entry in the table
-  function SQLUpdate($additional = null, $options=array('section' => null, 'fields' => null, 'table' => null, 'database' => null, 'idname' => "id")) {
+  function SQLUpdate($additional = null, $options=NULL) {
     // default options
-    $options = array_merge($options, array('section' => null, 'fields' => null, 'table' => $this->table, 'database' => $this->database, 'idname' => $this->idname));
+    $defaultoptions = array('section' => null, 'fields' => null, 'table' => $this->table, 'database' => $this->database, 'idname' => $this->idname);
+    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
     $database = $options['database'];
     $table = $options['table'];
     $idname = $options['idname'];
@@ -809,9 +861,10 @@ QUOTE;
   }
 
   // Delete an entry from the table
-  function SQLDelete($options=array('table' => null, 'database' => null, 'idname' => "id")) {
+  function SQLDelete($options=NULL) {
     // default options
-    $options = array_merge($options, array('table' => $this->table, 'database' => $this->database, 'idname' => $this->idname));
+    $defaultoptions = array('table' => $this->table, 'database' => $this->database, 'idname' => $this->idname);
+    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
     $database = $options['database'];
     $table = $options['table'];
     $idname = $options['idname'];
@@ -825,9 +878,10 @@ QUOTE;
   }
   
   // Fetch values from the table
-  function SQLSelect($id, $additional = null, $options=array('section' => null, 'fields' => null, 'table' => null, 'database' => null, 'idname' => "id")) {
+  function SQLSelect($id, $additional = null, $options=NULL) {
     // default options
-    $options = array_merge($options, array('section' => null, 'fields' => null, 'table' => $this->table, 'database' => $this->database, 'idname' => $this->idname));
+    $defaultoptions = array('section' => null, 'fields' => null, 'table' => $this->table, 'database' => $this->database, 'idname' => $this->idname);
+    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
     $database = $options['database'];
     $table = $options['table'];
     $idname = $options['idname'];
@@ -840,7 +894,8 @@ QUOTE;
   }
   
   // Load the form from the table
-  function SQLLoad($id, $options=array('section' => null, 'fields' => null, 'table' => null, 'database' => null, 'idname' => "id")) {
+  // Just a wrapper for SQLSelect without additions
+  function SQLLoad($id, $options=NULL) {
     $result = $this->SQLSelect($id, null, $options);
     $source = mysql_fetch_array($result);
     return $source ? $this->parseValues($source) : NULL;
@@ -1416,18 +1471,63 @@ class StateFormField extends PatternFormField {
   }
 }
 
+
 ///
 // A FormField that is a 2-letter Country abbreviation
 class CountryFormField extends StateFormField {
-
   function CountryFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
+    global $ISO_3166_1_countries;
     parent::StateFormField($name, $description, $optional, $annotation, $instance);
     // Override the state settings
     $this->title = "country designation";
     $this->placeholder = 'CC';
+    // We'll let you enter anything, but heuristicate it to a 2-letter code
+    $this->maxlength = NULL;
+  }
+
+  // For this particular field, we heuristicate before we validate
+  function isvalid ($value) {
+    if (($value == $this->default) ||
+        ((! $this->required) && empty($value))) {
+      return (! $this->required);
+    } else {
+      return parent::isvalid($this->heuristicate($value));
+    }
+  }
+  
+  function canonical($value) {
+    return parent::canonical($this->heuristicate($value));
+  }
+  
+  function heuristicate($value) {
+    global $ISO_3166_1_countries;
+    include "ISO-3166-1.php";
+
+    $upper = strtoupper($value);
+    // May already be correct
+    if (array_key_exists($upper, $ISO_3166_1_countries)) {
+        return $upper;
+    }
+    // Quick fixes
+    switch ($upper) {
+      case 'USA':
+        return 'US';
+    }
+    // The hard way
+    $matches = array();
+    foreach ($ISO_3166_1_countries as $code => $name) {
+      if (stristr($name, $value)) { $matches[$name] = $code; }
+    }
+    if (count($matches) == 1) {
+      return array_shift($matches);
+    } else if (count($matches) > 1) {
+      foreach($matches as $name => $code) {
+        if (strcasecmp($name, $value) == 0) { return $code; }
+      }
+    }
+    return $upper;
   }
 }
-
 
 ///
 // A FormField that is a ZIP code
