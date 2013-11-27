@@ -37,14 +37,25 @@ class FileFormField extends PatternFormField {
 QUOTE;
     // For unknown reasons, the MAX_FILE_SIZE input has to come first
     $element .= parent::HTMLTableColumn();
+    // File forms can be inscrutible if they are autosubmitted (e.g., images)
+    if ($this->autosubmit && (! $this->isvalid($this->value))) {
+      $msg = "'{$this->HTMLValue()}' is not a valid {$this->title}";
+      if ($this->error) {
+        $msg .= " ({$this->error})";
+      }
+      $element .=
+<<<QUOTE
 
+    <p class="errortext">{$msg}</p>
+QUOTE;
+    }
     return $element;
   }
   
   function errorMessage() {
     $message = parent::errorMessage();
     if ($this->error) {
-      $message .= " (" . $this->error . ")";
+      $message .= " ({$this->error})";
     }
     return $message;
   }
@@ -73,14 +84,14 @@ QUOTE;
     switch (true) {
       case (! parent::isvalid($value)):
         $this->error = "File name must be short and simple.";
-        if ($debugging) {
-          $this->error .= "[" . $value . "]";
+        if ($debugging > 1) {
+          $this->error .= " [" . $value . "]";
         }
         return false;
       case (! $this->contentAccessValid()):
         $this->error = "Content inaccessible";
-        if ($debugging) {
-          $this->error .= "[" . $this->filepath($value) . "]";
+        if ($debugging > 1) {
+          $this->error .= " [" . $this->filepath($value) . "]";
         }
         return false;
       default:
@@ -153,14 +164,14 @@ QUOTE;
         switch (true) {
           case ($_FILES[$input]["error"] != 'UPLOAD_ERROR_OK'):
             $this->error = "Error uploading";
-            if ($debugging) {
-              $this->error .= "[" . $_FILES[$input]["error"] . "]";
+            if ($debugging > 1) {
+              $this->error .= " [" . $_FILES[$input]["error"] . "]";
             }
             break;
           case (! is_uploaded_file($tempname)):
             $this->error = "Invalid file";
-            if ($debugging) {
-              $this->error .= "[" . $tempname . "]";
+            if ($debugging > 1) {
+              $this->error .= " [" . $tempname . "]";
             }
             break;
           case (! $this->validType($tempname)):
@@ -168,21 +179,21 @@ QUOTE;
             break;
           case ($size < 0 || $size > $this->maxsize):
             $this->error = "File must be less than {$this->maxsize} bytes.";
-            if ($debugging) {
-              $this->error .= "[" . $size . "]";
+            if ($debugging > 1) {
+              $this->error .= " [" . $size . "]";
             }
             break;
           case (!is_writable($this->dirpath())):
             $this->error = "Directory inaccessible";
-            if ($debugging) {
-              $this->error .= "[" . $this->dirpath() . "]";
+            if ($debugging > 1) {
+              $this->error .= " [" . $this->dirpath() . "]";
             }
             break;
           // Try to move it
           case (! $this->moveFile($tempname, $filepath)):
             $this->error = "Error moving";
-            if ($debugging) {
-              $this->error .= "[" . $tempname . " => " . $filepath . "]";
+            if ($debugging > 1) {
+              $this->error .= " [" . $tempname . " => " . $filepath . "]";
             }
             break;
           default:
@@ -304,7 +315,7 @@ QUOTE;
     $mime_type = $imgdetails['mime'];
     if(($mime_type != 'image/jpeg') && ($mime_type != 'image/gif') && ($mime_type != 'image/png')) {
       $this->error = "Image must be jpeg, gif, or png.";
-      if ($debugging) {
+      if ($debugging > 1) {
         $this->error .= ": " . $mime_type;
       }
       return false;
