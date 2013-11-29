@@ -38,7 +38,7 @@ QUOTE;
     // For unknown reasons, the MAX_FILE_SIZE input has to come first
     $element .= parent::HTMLTableColumn();
     // File forms can be inscrutible if they are autosubmitted (e.g., images)
-    if ($this->autosubmit && (! $this->isvalid($this->value))) {
+    if ($this->autosubmit && $this->hasValue() && (! $this->isvalid($this->value))) {
       $msg = "'{$this->HTMLValue()}' is not a valid {$this->title}";
       if ($this->error) {
         $msg .= " ({$this->error})";
