@@ -258,10 +258,10 @@ function lookups_from_table_enums ($db, $table) {
 	$array = array();
 	
 	while($row = mysql_fetch_object($query)) {
- 		if(ereg('set|enum', $row->Type)) {
+ 		if(preg_match('/set|enum/', $row->Type)) {
 			// enums start at 1, 0 is an invalid entry
- 		  $start = ereg('set', $row->Type) ? 0 : 1;
-			$keys = eval(ereg_replace('set|enum', 'return array', $row->Type).';');
+ 		  $start = preg_match('/set/', $row->Type) ? 0 : 1;
+			$keys = eval(preg_replace('/set|enum/', 'return array', $row->Type).';');
 			$map = array();
 			// If NULL is allowed, make the first map entry empty
 			if($row->Null == 'YES') {
@@ -527,14 +527,14 @@ function cp1252_to_unicode($str) {
 function validate_date($date, $minyear = 0, $maxyear = 9999) {
     // echo "validate_date passed date= $date";
 
-    if ((ereg ("([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})", $date, $regs)) or
-        (ereg ("([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})", $date, $regs))){
+    if ((preg_match ("/([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})/", $date, $regs)) or
+        (preg_match ("/([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})/", $date, $regs))){
 
         list($wholeyear, $year,$month,$day) = $regs;
 
     }
-    elseif((ereg ("([0-9]{1,2})-([0-9]{1,2})-([0-9]{4})", $date, $regs)) or
-           (ereg ("([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})", $date, $regs))){
+    elseif((preg_match ("/([0-9]{1,2})-([0-9]{1,2})-([0-9]{4})/", $date, $regs)) or
+           (preg_match ("/([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})/", $date, $regs))){
 
         list($wholeyear,$month,$day,$year) = $regs;
     }

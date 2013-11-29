@@ -200,7 +200,7 @@ class Form {
   ///
   // Compute the choices for an enum field
   function choicesForField($field) {
-    return $this->enums[$field];
+    return array_key_exists($field, $this->enums) && $this->enums[$field];
   }
   
   // Define choices, possibly overriding defaults from DatabaseForm
@@ -2194,7 +2194,7 @@ class MultipleChoiceFormField extends ChoiceFormField {
 
   function SQLType() {
     $choices = "";
-    foreach($this->choices as $key -> $choice) {
+    foreach($this->choices as $key => $choice) {
       $choices .= ($choices ? ", " : "") . PHPtoSQL($choice);
     }
     return "SET({$choices})";
@@ -2221,8 +2221,8 @@ class CheckboxFormField extends MultipleChoiceFormField {
       $element .= "<div>valid: " . ($this->valid ? "true" : "false") . "</div>";
       $element .= "<div>choices keys: " . implode(",", array_keys($this->choices)) . "</div>";
       $element .= "<div>choices values: " . implode(",", $this->choices) . "</div>";
-      $element .= "<div>value array keys:" . implode(",", array_keys($this->value)) . "</div>";
-      $element .= "<div>value array values:" . implode(",", $this->value) . "</div>";
+      $element .= "<div>value array keys:" . ($this->value ? implode(",", array_keys($this->value)) : '') . "</div>";
+      $element .= "<div>value array values:" . ($this->value ? implode(",", $this->value) : '') . "</div>";
     }
     $element .=
 <<<QUOTE
