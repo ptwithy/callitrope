@@ -2152,12 +2152,24 @@ class MultipleChoiceFormField extends ChoiceFormField {
 
   function SQLValue() {
     if ($this->hasvalue()) {
-      $sql = array();
+      $strings = array();
+      $number = 0;
+      $isnumeric = true;
       // NOT choice -- SQL Stores representation
       foreach ($this->value as $val) {
-        $sql[] = addslashes(PHPtoSQL($val));
+        $val = PHPtoSQL($val);
+        $strings[] = $val;
+        if (is_numeric($val)) {
+          $number |= 1 << $val;
+        } else {
+          $isnumeric = false;
+        }
       }
-      return "'" . join(",", $sql) . "'";
+      if ($isnumeric) {
+        return $number;
+      } else {
+        return "'" . join(",", $strings) . "'";
+      }
     } else {
       return "DEFAULT";
     }
