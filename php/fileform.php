@@ -355,10 +355,10 @@ QUOTE;
   // http://stackoverflow.com/questions/14649645/resize-image-in-php
   // http://salman-w.blogspot.com/2008/10/resize-images-using-phpgd-library.html
   function moveFileWithResize($tempfile, $filepath, $w, $h) {
-    if ($w && (!$h)) { $h = $w; }
-    if ($h && (!$w)) { $w = $h; }
     list($width, $height, $image_type) = getimagesize($tempfile);
     $source_aspect = $width / $height;
+    if ($w && (!$h)) { $h = $w / $source_aspect; }
+    if ($h && (!$w)) { $w = $h * $source_aspect; }
     $dest_aspect = $w / $h;
 
     if ($width < $w && $height < $h) {
