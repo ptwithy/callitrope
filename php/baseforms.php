@@ -200,7 +200,7 @@ class Form {
   ///
   // Compute the choices for an enum field
   function choicesForField($field) {
-    return array_key_exists($field, $this->enums) && $this->enums[$field];
+    return array_key_exists($field, $this->enums) ? $this->enums[$field] : null;
   }
   
   // Define choices, possibly overriding defaults from DatabaseForm
@@ -651,10 +651,7 @@ class DatabaseForm extends Form {
     foreach ($lookups as $field => $lookup) {
       $choices = array();
       foreach($lookup as $description => $index) {
-        // index null is how a nullable (optional) choice
-        if ($index != null) {
-          $choices[$index] = $description;
-        }
+        $choices[$index] = $description;
       }
       $enums[$field] = $choices;
     }
