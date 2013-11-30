@@ -885,7 +885,7 @@ QUOTE;
     $database = $options['database'];
     $table = $options['table'];
     $idname = $options['idname'];
-    $sql = "SELECT " . $this->SQLFields($options['section'], $options['fields']) . " FROM " . $table . " WHERE {$idname} = " . PHPtoSQL($id);
+    $sql = "SELECT " . $this->SQLFields($options['section'], $options['fields']) . " FROM " . $table . (($id != null) ? (" WHERE {$idname} = " . PHPtoSQL($id)) : '');
     if ($additional) {
       $sql .= ", ";
       $sql .= $additional;
@@ -1561,6 +1561,14 @@ class ZIPFormField extends PatternFormField {
       return "DEFAULT";
     }
   }
+  
+  // ZIP-codes want to be a string, not a number
+//   function SQLField() {
+//     $field = parent::SQLField();
+//     return <<<QUOTE
+// CONCAT("'", {$field}, "'") AS {$field}
+// QUOTE;
+//   }
 }
 
 ///
@@ -1985,9 +1993,9 @@ class ChoiceFormField extends FormField {
 
   function SQLField() {
     // Coerce enums to the type we expect
-    $keys = array_keys($this->choices);
+    $keys = is_array($this->choices) && array_keys($this->choices);
     $field = parent::SQLField();
-    if (is_numeric($keys[0])) {
+    if ($keys && is_numeric($keys[0])) {
       return "{$field}+0 AS {$field}";
     } else {
       return $field;
