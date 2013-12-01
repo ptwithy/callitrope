@@ -10,9 +10,9 @@
 class FormMultiField extends FormField {
   var $fields;
   
-  function FormMultiField ($name, $description, $fields, $optional=false, $annotation="", $instance=NULL, $priority=0) {
+  function FormMultiField ($name, $description, $fields, $optional=false, $options = NULL) {
     $this->fields = $fields;
-    parent::FormField($name, $description, $optional, $annotation, $instance, $priority);
+    parent::FormField($name, $description, $optional, $options);
   }
 
   function setInstance($instance=NULL) {
