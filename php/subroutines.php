@@ -58,7 +58,10 @@ function print_error_and_exit () {
 // records
 function is_email_valid($email, $dns=FALSE) {
     // Match address against reasonable pattern
-    if (preg_match('/^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,})$/i',
+    // C.f., http://www.w3.org/TR/html5/forms.html#e-mail-state-(type=email)
+    // Although I added a + to the last subgroup, to require at least one `.`
+    // in the domain part
+    if (preg_match('/^[a-zA-Z0-9.!#$%&\'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/',
                    $email)) {
         // Ignore these bozos
         if ($email == "sample@email.tst") return FALSE;
@@ -124,7 +127,7 @@ function h2s($what) {
 // remove spaces with trim and escape inner quotes with h2s
 //
 function clean($str) {
-	return h2s(trim($str));
+  return h2s(trim($str));
 }
 
 ///
@@ -253,27 +256,27 @@ function lookup_from_table($db, $table, $key, $value, $sort = "", $where = "") {
 // @param $db: the database
 // @param $table: the table
 function lookups_from_table_enums ($db, $table) {
-	$selector = "SHOW COLUMNS FROM $table";
-    $query = mysql_query($selector, $db) or ode();
-	$array = array();
-	
-	while($row = mysql_fetch_object($query)) {
- 		if(preg_match('/set|enum/', $row->Type)) {
-			// enums start at 1, 0 is an invalid entry
- 		  $start = preg_match('/set/', $row->Type) ? 0 : 1;
-			$keys = eval(preg_replace('/set|enum/', 'return array', $row->Type).';');
-			$map = array();
-			// If NULL is allowed, make the first map entry empty
-			if($row->Null == 'YES') {
-				$map[''] = NULL;
-			}
-			foreach ($keys as $index => $name) {
-				$map[$name] = $index + $start;
-			}
-			$array[$row->Field] = $map;
-	 	}
-	}
-	return $array;
+  $selector = "SHOW COLUMNS FROM $table";
+  $query = mysql_query($selector, $db) or ode();
+  $array = array();
+
+  while($row = mysql_fetch_object($query)) {
+    if(preg_match('/^(set|enum)/', $row->Type)) {
+      // enums start at 1, 0 is an invalid entry
+      $start = preg_match('/^set/', $row->Type) ? 0 : 1;
+      $keys = eval(preg_replace('/^(set|enum)/', 'return array', $row->Type).';');
+      $map = array();
+      // If NULL is allowed for an enum, make the first map entry empty
+      if(($start == 1) && ($row->Null == 'YES')) {
+        $map[''] = NULL;
+      }
+      foreach ($keys as $index => $name) {
+        $map[$name] = $index + $start;
+      }
+      $array[$row->Field] = $map;
+    }
+  }
+  return $array;
 }
 
 ///
@@ -296,11 +299,11 @@ function menu_from_array($name, $array, $select = "", $properties = "", $bitch=f
     $html = "<select name=\"$name\" $properties>";
     if ($bitch) {
       if (is_array($select)) {
-      	$bitch = array_count_values($select) !=
-      		array_count_values(array_intersect($select, $array));
+        $bitch = array_count_values($select) !=
+          array_count_values(array_intersect($select, $array));
       } else {
         // Use array_keys because the key in a map might be NULL!
-      	$bitch = (! array_count_values(array_keys($array, $select)));
+        $bitch = (! array_count_values(array_keys($array, $select)));
       }
      }
     foreach ($array as $this_key => $this_value) {
@@ -314,7 +317,7 @@ function menu_from_array($name, $array, $select = "", $properties = "", $bitch=f
         $html .= "\n  <option value=\"$v\" $s>$k</option>";
     }
     if ($bitch) {
-    	$html .= "\n  <option value=\"$select\" selected>***INVALID***</option>";
+      $html .= "\n  <option value=\"$select\" selected>***INVALID***</option>";
     }
     $html .= "\n</select>\n";
 
@@ -552,7 +555,7 @@ function validate_date($date, $minyear = 0, $maxyear = 9999) {
         return false;
     }
     elseif ($year < $minyear || $year > $maxyear) {
-    	return false;
+      return false;
     }
     //      print $regs[0];
     return true;

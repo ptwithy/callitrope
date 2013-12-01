@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Copyright (c) 2012, callitrope
+ * Copyright (c) 2012, 2013 callitrope
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,7 +59,7 @@ function is_field ($f) { return $f instanceof FormField; };
 function order ($a, $b) { return $a->priority - $b->priority; };
 
 function fieldInternal($name, $description=null, $type=null, $optional=false, $options=NULL) {
-  $namemap = array("email", "choice", "state", "zip", "postal", "country", "phone", "cell", "birth", "date", "daytime", "time", "file", "image", "picture");
+  $namemap = array("email", "number", "choice", "state", "zip", "postal", "country", "phone", "cell", "birth", "date", "daytime", "time", "file", "image", "picture");
   if ($type == null) {
     foreach ($namemap as $n) {
       if (stristr($name, $n)) {
@@ -68,63 +68,55 @@ function fieldInternal($name, $description=null, $type=null, $optional=false, $o
       }
     }
   }
-  if ($description == null) { $description = ucwords(str_replace("_", " ", $name)); }
-  // default options
-  $defaultoptions = array('annotation' => '', 'instance' => NULL, 'priority' => 0, 'choices' => NULL, 'max' => NULL, 'min' => NULL, 'step' => NULL);
-  $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
 
-  $annotation = $options['annotation'];
-  $instance = $options['instance'];
-  $priority = $options['priority'];
-  
   switch ($type) {
     case "email":
-      return new EmailFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new EmailFormField($name, $description, $optional, $options);
     case "number":
-      return new NumberFormField($name, $description, $options["min"], $options["max"], $options["step"], $optional, $annotation, $instance, $priority);
+      return new SimpleNumberFormField($name, $description, $optional, $options);
     case "state":
-      return new StateFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new StateFormField($name, $description, $optional, $options);
     case "zip":
-      return new ZipFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new ZipFormField($name, $description, $optional, $options);
     case "postal":
-      return new PostalCodeFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new PostalCodeFormField($name, $description, $optional, $options);
     case "country":
-      return new CountryFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new CountryFormField($name, $description, $optional, $options);
     case "phone":
     case "cell":
-      return new PhoneFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new PhoneFormField($name, $description, $optional, $options);
     case "date":
-      return new DateFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new DateFormField($name, $description, $optional, $options);
     case "birth":
     case "birthdate":
-      return new BirthdateFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new BirthdateFormField($name, $description, $optional, $options);
     case "daytime":
-      return new DaytimeFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new DaytimeFormField($name, $description, $optional, $options);
     case "text":
     case "area":
     case "textarea":
-      return new TextAreaFormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new TextAreaFormField($name, $description, $optional, $options);
     case "button":
     case "radio":
     case "radiobutton":
     case "choice":
     case "single":
-      return new RadioFormField($name, $description, $options["choices"], $optional, $annotation, $instance, $priority);
+      return new SimpleRadioFormField($name, $description, $optional, $options);
     case "check":
     case "checkbox":
     case "multiple":
-      return new CheckboxFormField($name, $description, $options["choices"], $optional, $annotation, $instance, $priority);
+      return new SimpleCheckboxFormField($name, $description, $optional, $options);
     case "menu":
-      return new MenuFormField($name, $description, $options["choices"], $optional, $annotation, $instance, $priority);
+      return new SimpleMenuFormField($name, $description, $optional, $options);
 
     case "file":
-      return new FileFormField($name, $description, $optional, $annotation, $instance, $priority, $options);
+      return new FileFormField($name, $description, $optional, $options);
     case "image":
     case "picture":
-      return new ImageFormField($name, $description, $optional, $annotation, $instance, $priority, $options);
+      return new ImageFormField($name, $description, $optional, $options);
 
     default:
-      return new FormField($name, $description, $optional, $annotation, $instance, $priority);
+      return new FormField($name, $description, $optional, $options);
   }
 }
 
@@ -170,30 +162,6 @@ class Form {
   
   // Array of fields to auto-add
   var $columns;
-  
-  function autoAddFields($columns=null) {
-    if ($columns != null) {
-      $this->columns = $columns;
-    }
-    foreach ($this->columns as $col => $desc) {
-      if ($debugging > 1) {
-        echo "<pre>{$col} => " . print_r($desc) . "<pre>";
-      }
-      if (array_key_exists($col, $this->enums)) {
-        $e = $this->enums[$col];
-        if (array_key_exists(0, $e)) {
-          $this->addField(field($col, null, "checkbox"));
-        } elseif (in_array("", $e)) {
-          $this->addField(field($col, null, "menu"));
-        } else {
-          $this->addField(field($col, null, "radio"));
-        }
-      } else {
-        $this->addField(field($col));
-      }
-    }
-  }
-  
   // Array of choices
   var $enums;
   
@@ -214,10 +182,93 @@ class Form {
     }
   }
   
-
+  // Ordering is important
+  var $sqlTypeMap = array (
+    'text' => 'area'
+    ,'int' => 'number'
+    ,'decimal' => 'number'
+    ,'datetime' => 'datetime'
+    ,'date' => 'date'
+    ,'time' => 'time'
+    ,'blob' => 'image'
+  );
+    
+      
+  function autoAddFields($include=null, $omit= null) {
+    global $debugging;
+    $columns = $this->columns;
+    if ($include !== null) {
+      // filter columns to add
+      $columns = array_intersect_key($columns, array_flip($include));
+    }
+    if ($omit !== null) {
+      $columns = array_diff_key($columns, array_flip($omit));
+    }
+    if ($debugging > 1) {
+      echo "<pre>\$columns => " . print_r($columns) . "<pre>";
+    }
+    foreach ($columns as $field => $desc) {
+      if ($debugging > 2) {
+        echo "<pre>{$field} => " . print_r($desc) . "<pre>";
+      }
+      $type = null;
+      $e = $this->choicesForField($field);
+      if (is_array($e)) {
+        if ($debugging > 2) {
+          echo "<pre>{$field} choices => " . print_r($e) . "<pre>";
+        }
+        if (array_key_exists(0, $e)) {
+          $type = "checkbox";
+        } elseif (in_array("", $e)) {
+          $type = "menu";
+        } else {
+          $type = "radio";
+        }
+      }
+      if ($type === null) {
+        $sqltype = $desc->Type;
+        foreach ($this->sqlTypeMap as $s => $t) {
+          if (stristr($s, $sqltype)) {
+            $type = $t;
+            break;
+          }
+        }
+      }
+      $f = field($field, null, $type);
+      if (array_key_exists($f->id, $this->fields)) {
+        // Don't add fields that have already been added
+      } else if (($f->id == $this->idname) ||
+                 ($f->id == $this->createdname) ||
+                 ($f->id == $this->modifiedname)) {
+        // Don't add any of the special database fields
+      } else {
+        // Ok, add it
+        $this->addField($f);
+      }
+      if ($debugging > 1) {
+        echo "<pre>{$field} => " . $f . "<pre>";
+      }
+    }
+  }
+  
   // This holds all the fields in the form.  Each time you create
   // a field, it will be added to this array.
   var $fields;
+
+  // Sets the order of the fields in the form
+  function setFieldOrder($ordering) {
+    $newfields = array();
+    $oldfields = $this->fields;
+    foreach ($ordering as $field) {
+      $newfields[$field] = $oldfields[$field];
+    }
+    foreach ($oldfields as $field => $value) {
+      if (!array_key_exists($field, $newfields)) {
+        $newfields[$field] = $value;
+      }
+    }
+    $this->fields = $newfields;
+  }
 
   // These allow a form to have multiple sections.  Each section is
   // represented by a table, which allows different styling between
@@ -634,15 +685,22 @@ class DatabaseForm extends Form {
   var $table;
   // If defined, makes the form editable
   var $idname;
+  var $editable = false;
+  var $recordID = NULL;
+  // If defined will be updated with created and modified timestamps
+  var $createdname;
+  var $modifiedname;
   
   function DatabaseForm($database, $table, $options=null) {
     // default options
-    $defaultoptions = array('name' => null, 'action' => "", 'method' => "post", 'usedivs' => false, 'idname' => NULL);
-    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
+    $defaultoptions = array('name' => null, 'action' => "", 'method' => "post", 'usedivs' => false, 'idname' => NULL, 'createdname' => NULL, 'modifiedname' => NULL);
+    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions; 
     parent::Form($options['name'], $options['action'], $options['method'], $options['usedivs']);
     $this->database = $database;
     $this->table = $table;
     $this->idname = $options['idname'];
+    $this->createdname = $options['createdname'];
+    $this->modifiedname = $options['modifiedname'];
     $this->editable = $this->idname != NULL;
     $this->columns = columns_of_table($this->database, $this->table);
     $lookups = lookups_from_table_enums($this->database, $this->table);
@@ -651,15 +709,15 @@ class DatabaseForm extends Form {
     foreach ($lookups as $field => $lookup) {
       $choices = array();
       foreach($lookup as $description => $index) {
-        $choices[$index] = $description;
+        // NULL is 'no choice'
+        if ($index !== NULL) {
+          $choices[$index] = $description;
+        }
       }
       $enums[$field] = $choices;
     }
     $this->enums = $enums;
   }
-  
-  var $recordID = NULL;
-  var $editable = false;
   
   // Handles all parsing, etc.
   function initialize() {
@@ -679,24 +737,23 @@ class DatabaseForm extends Form {
       print_r($_FILES);
       echo "</pre>";
     }
-  
+
     /**
-     * For editing, if we have an ID, add that as a non-editable field
-     * For the purposes of loading from the database, or refreshing (Cancel) we grab the id 
-     * directly
-     * TODO: The idname is a parameter of the form?
+     * If this is an editable form, look for a passed in id
+     * either in a get var (say from a menu of forms to edit)
+     * or in a post var (because we came back to edit after submitting)
+     *
+     * Get trumps post, so you can switch records with a query arg
      */
     $idname = $this->idname;
     $editable = $this->editable;
     $this->recordID = NULL;
     if ($editable) {
       // Editable form
-      if ((isset($_GET[$idname]) && $this->recordID = clean($_GET[$idname])) ||
-          (isset($_POST[$idname]) && $this->recordID = clean($_POST[$idname]))) {
-          // We special-case 'id' as an acronym
-          $idfield = field($idname, ($idname == 'id' ? 'ID' : NULL), 'number');
-          $idfield->setReadonly(true);
-          $this->addField($idfield);
+      if (isset($_GET[$idname])) {
+        $this->recordID = clean($_GET[$idname]);
+      } else if (isset($_POST[$idname])) {
+        $this->recordID = clean($_POST[$idname]);
       }
     }
   }
@@ -792,6 +849,7 @@ class DatabaseForm extends Form {
       <input type="submit" name="updateButton" value="Update Entry">&nbsp;&nbsp;
       <input type="submit" name="cancelButton" value="Revert Entry">&nbsp;&nbsp;
       <input class="submit" onclick="return confirm('Are you sure you want to delete this entry?')"  type="submit"  name="deleteButton" value="Delete Entry">
+      <input type="hidden" id="{$this->idname}" name="{$this->idname}" value="{$this->recordID}">
 QUOTE;
     }
     return parent::HTMLForm($process, $buttons);
@@ -818,13 +876,20 @@ QUOTE;
   }
     
   // Insert the values into the table
-  function SQLInsert($additional = null, $options=NULL) {
+  function SQLInsert($additional = "", $options=NULL) {
     // default options
     $defaultoptions = array('section' => null, 'fields' => null, 'table' => $this->table, 'database' => $this->database);
     $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
     $database = $options['database'];
     $table = $options['table'];
     $sql = "INSERT INTO " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
+    // Update created and modified
+    if ($this->createdname) {
+      $additional .= ($additional ? ", " : "") . "`{$this->createdname}` = NOW()";
+    }
+    if ($this->modifiedname) {
+      $additional .= ($additional ? ", " : "") . "`{$this->modifiedname}` = NOW()";
+    }
     if ($additional) {
       $sql .= ", ";
       $sql .= $additional;
@@ -837,19 +902,24 @@ QUOTE;
   }
 
   // Update an entry in the table
-  function SQLUpdate($additional = null, $options=NULL) {
+  function SQLUpdate($additional = "", $options=NULL) {
     // default options
     $defaultoptions = array('section' => null, 'fields' => null, 'table' => $this->table, 'database' => $this->database, 'idname' => $this->idname);
     $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
     $database = $options['database'];
     $table = $options['table'];
     $idname = $options['idname'];
-    $id = $this->fieldValue($idname);
-    $sql = "UPDATE " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']). " WHERE " . $this->field($idname)->SQLForm();
+    $id = $this->recordID ? $this->recordID : $this->fieldValue($idname);
+    $sql = "UPDATE " . $table . " SET " . $this->SQLForm($options['section'], $options['fields']);
+    // Only modified will be updated here
+    if ($this->modifiedname) {
+      $additional .= ($additional ? ", " : "") . "`{$this->modifiedname}` = NOW()";
+    }
     if ($additional) {
       $sql .= ", ";
       $sql .= $additional;
     }
+    $sql .= " WHERE {$idname} = " . PHPtoSQL($id);
     $success = $this->SQLExecuteQuery($sql, $database) ? $id : NULL;
     if ($success) {
       $this->finalize();
@@ -865,8 +935,8 @@ QUOTE;
     $database = $options['database'];
     $table = $options['table'];
     $idname = $options['idname'];
-    $id = $this->fieldValue($idname);
-    $sql = "DELETE FROM " . $table . " WHERE " . $this->field($idname)->SQLForm();
+    $id = $this->recordID ? $this->recordID : $this->fieldValue($idname);
+    $sql = "DELETE FROM " . $table . " WHERE {$idname} = " . PHPtoSQL($id);
     $success =  $this->SQLExecuteQuery($sql, $database) ? $id : NULL;
     if ($success) {
       $this->finalize();
@@ -943,28 +1013,46 @@ class FormField {
   var $input;
   // Parse priority
   var $priority = 0;
+  // For debugging
+  var $options;
 
   // Create a form field.  Arguments are:
   // @param name:String The name of the field
   // @param description:String The English description of the field
   // @param optional:Boolean (optional) True if the field is not
   // required
-  // @param annotation:String (optional) Additional description that
-  // will appear to the right of the form
-  // @param instance:Number (optional) An index number for multiple
-  // occurences of the same field
-  // @param priority:Number (optional) A priority for checking validity
-  // higher values are checked first
-  function FormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0) {
+  // @param options:Array (optional) Additional options
+  function FormField ($name, $description, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'type' => 'text'
+      ,'title' => NULL
+      ,'placeholder' => NULL
+      ,'instance' => NULL
+      ,'priority' => 0
+      ,'readonly' => false
+      ,'autosubmit' => false
+      ,'maxlength' => NULL
+      ,'default' => NULL
+    );
+    $this->options = $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+
     $this->name = $name;
-    $this->description = $description;
-    $this->type = "text";
+    $this->description = ($description !== NULL) ? $description : ucwords(str_replace("_", " ", $name));
+    $this->type = $options['type'];
     $this->required = (! $optional);
-    $this->annotation = $annotation;
-    $this->readonly = false;
+    $this->annotation = $options['annotation'];
+    $this->title = $options['title'];
+    $this->placeholder = $options['placeholder'];
+    $this->readonly = $options['readonly'];
+    $this->autosubmit = $options['autosubmit'];
+    $this->maxlength = $options['maxlength'];
+    $this->default =$options['default'];
     $this->valid = true;
-    $this->priority = $priority;
-    $this->setInstance($instance);
+    $this->priority = $options['priority'];
+    $this->setInstance($options['instance']);
   }
   
   function setInstance($instance=NULL) {
@@ -975,11 +1063,17 @@ class FormField {
     $this->input = "{$this->name}{$multiple}";
   }
   
+  // Make field properties match the DB
   function setForm($form) {
     $this->form = $form;
-    if ($this->maxlength == NULL && $form->columns && array_key_exists($this->id, $form->columns)) {
+    if ($form->columns && array_key_exists($this->id, $form->columns)) {
       $descriptor = $form->columns[$this->id];
-      if ($descriptor) {
+      // Non-nullable fields are required
+      $this->required = ($descriptor->Null != 'YES');
+      // Pick up any default
+      if ($descriptor->Default) { $this->default = $descriptor->Default; }
+      // Pick up test lengths
+      if ($this->maxlength == NULL) {
         if (preg_match("/VARCHAR\\((\\d*)\\)/", $descriptor->Type, $regs)) {
           $this->maxlength = 0 + $regs[1];
         }
@@ -1017,17 +1111,18 @@ class FormField {
   // Creates a canonical version of the value for this field
   function canonical($value) {
     $value = trim($value);
-    // Allow erasing of non-required values
-    if ((! $this->required) && empty($value)) {
-      unset($value);
-    }
     return $value;
   }
 
   function setValue($v) {
     // If the value is valid, store it
     if ($this->isvalid($v)) {
-      $this->value = $this->canonical($v);
+      // Allow erasing of non-required values
+      if ((! $this->required) && empty($v)) {
+        $this->value = NULL;
+      } else {
+        $this->value = $this->canonical($v);
+      }
       $this->valid = true;
     }
     // Otherwise, store the bogus value for error reporting
@@ -1233,7 +1328,7 @@ QUOTE;
   }
   
   function __toString() {
-    return $this->SQLForm();
+    return get_class($this) . ": (" . var_export($this->options, true) . ") " . $this->SQLForm();
   }
 
   // SQL column specification
@@ -1283,12 +1378,20 @@ QUOTE;
 //
 class EmailFormField extends FormField {
 
-  function EmailFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
+  function EmailFormField ($name, $description, $optional=false, $options=NULL) {
     global $html5;
-    parent::FormField($name, $description, $optional, $annotation, $instance);
-    $this->type = $html5 ? "email" : "text";
-    // http://stackoverflow.com/questions/386294/what-is-the-maximum-length-of-a-valid-email-address
-    $this->maxlength = 254;
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'type' => $html5 ? "email" : "text"
+      ,'title' => 'email address'
+      ,'placeholder' => 'you@isp.com'
+      // http://stackoverflow.com/questions/386294/what-is-the-maximum-length-of-a-valid-email-address
+      ,'maxlength' => 254
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::FormField($name, $description, $optional, $options);
   }
 
   function isvalid($value) {
@@ -1297,10 +1400,6 @@ class EmailFormField extends FormField {
     } else {
       return parent::isvalid($value) && is_email_valid($value);
     }
-  }
-
-  function errorMessage() {
-    return $this->description . ': "' . $this->HTMLValue() . '" is not a valid email address. Please enter a valid email address.';
   }
 
   function additionalInputAttributes () {
@@ -1317,7 +1416,7 @@ class EmailFormField extends FormField {
 ///
 // A FormField that is a number in a certain range
 //
-class NumberFormField extends FormField {
+class SimpleNumberFormField extends FormField {
   var $min;
   var $max;
   var $step;
@@ -1336,23 +1435,33 @@ class NumberFormField extends FormField {
   // required
   // @param annotation:String (optional) Additional description that
   // will appear to the right of the form
-  function NumberFormField ($name, $description, $min=null, $max=null, $step=null, $optional=false, $annotation="", $instance=NULL) {
+  function SimpleNumberFormField ($name, $description, $optional=false, $options=NULL) {
     global $mobile;
-    parent::FormField($name, $description, $optional, $annotation, $instance);
-    $this->type = $mobile ? "number" : "text";
-    $this->min = $min;
-    $this->max = $max;
-    $this->step = $step;
-    $this->title = "number";
-    if ($this->min && $this->max) {
-      $this->title .= " between {$this->min} and {$this->max}";
+    $title = "number";
+    if (isset($options['min']) && isset($options['max'])) {
+      $title .= " between {$options['min']} and {$options['max']}";
     }
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'type' => ($mobile ? "number" : "text")
+      ,'title' => $title
+      ,'min' => NULL
+      ,'step' => NULL
+      ,'max' => NULL
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+
+    parent::FormField($name, $description, $optional, $options);
+    $this->min = $options['min'];
+    $this->max = $options['max'];
+    $this->step = $options['step'];
   }
 
   function isvalid ($value) {
-    if (($value == $this->default) ||
-        ((! $this->required) && empty($value))) {
-      return (! $this->required);
+    if ((! $this->required) && empty($value)) {
+      return true;
     } else {
       return parent::isvalid($value) &&
         is_numeric($value) &&
@@ -1362,6 +1471,9 @@ class NumberFormField extends FormField {
   }
 
   function errorMessage () {
+    if (empty($this->value) && $this->required) {
+      return $this->description . " is a required field. Please enter it below.";
+    }
     return $this->description . ': "' . $this->HTMLValue() . '" is not a valid '
       . $this->title
       . '. Please enter a valid ' . $this->title
@@ -1402,6 +1514,24 @@ class NumberFormField extends FormField {
   } 
 }
 
+///
+// Back-compatibility
+class NumberFormField extends SimpleNumberFormField {
+  function NumberFormField ($name, $description, $min=null, $max=null, $step=null, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      // We'll let you enter anything, but heuristicate it to a 2-letter code
+      ,'max' => $max
+      ,'step' => $step
+      ,'min' => $min
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleNumberFormField($name, $description, $optional, $options);
+  }
+}
+
 
 ///
 // Abstract FormField that matches a pattern
@@ -1410,21 +1540,31 @@ abstract class PatternFormField extends FormField {
   // The pattern that you have to match 
   var $pattern;
 
-  function PatternFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
-    parent::FormField($name, $description, $optional, $annotation, $instance);
+  function PatternFormField ($name, $description, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'pattern' => NULL
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::FormField($name, $description, $optional, $options);
+    $this->pattern = $options['pattern'];
   }
 
   function isvalid ($value) {
-    if (($value == $this->default) ||
-        ((! $this->required) && empty($value))) {
-      return (! $this->required);
+    if ((! $this->required) && empty($value)) {
+      return true;
     } else {
       return parent::isvalid($value) &&
-        preg_match($this->pattern,   $value);
+        preg_match($this->pattern, $value);
     }
   }
 
   function errorMessage () {
+    if (empty($this->value) && $this->required) {
+      return $this->description . " is a required field. Please enter it below.";
+    }
     return $this->description . ': "' . $this->HTMLValue() . '" is not a valid '
       . $this->title
       . '. Please enter a valid ' . $this->title
@@ -1451,20 +1591,27 @@ abstract class PatternFormField extends FormField {
 //
 class StateFormField extends PatternFormField {
 
-  function StateFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
-    parent::PatternFormField($name, $description, $optional, $annotation, $instance);
-    // Override the default
-    $this->maxlength = 2;
-    $this->pattern = "/^([A-Za-z]{2,2})$/";
-    $this->title = "state designation";
-    $this->placeholder = 'ST';
+  function StateFormField ($name, $description, $optional=false, $options) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'pattern' => "/^([A-Za-z]{2,2})$/"
+      ,'maxlength' => 2
+      ,'title' => "state designation"
+      ,'placeholder' => "ST"
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::PatternFormField($name, $description, $optional, $options);
   }
 
   function canonical ($value) {
     $value = parent::canonical($value);
     $matches = array();
-    preg_match($this->pattern, $value, $matches);
-    return strtoupper($matches[1]);
+    if (preg_match($this->pattern, $value, $matches)) {
+      return strtoupper($matches[1]);
+    }
+    return NULL;
   }
 }
 
@@ -1472,21 +1619,24 @@ class StateFormField extends PatternFormField {
 ///
 // A FormField that is a 2-letter Country abbreviation
 class CountryFormField extends StateFormField {
-  function CountryFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
-    global $ISO_3166_1_countries;
-    parent::StateFormField($name, $description, $optional, $annotation, $instance);
-    // Override the state settings
-    $this->title = "country designation";
-    $this->placeholder = 'CC';
-    // We'll let you enter anything, but heuristicate it to a 2-letter code
-    $this->maxlength = NULL;
+  function CountryFormField ($name, $description, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      // We'll let you enter anything, but heuristicate it to a 2-letter code
+      ,'maxlength' => NULL
+      ,'title' => "country designation"
+      ,'placeholder' => "CC"
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::StateFormField($name, $description, $optional, $options);
   }
 
   // For this particular field, we heuristicate before we validate
   function isvalid ($value) {
-    if (($value == $this->default) ||
-        ((! $this->required) && empty($value))) {
-      return (! $this->required);
+    if ((! $this->required) && empty($value)) {
+      return true;
     } else {
       return parent::isvalid($this->heuristicate($value));
     }
@@ -1497,6 +1647,7 @@ class CountryFormField extends StateFormField {
   }
   
   function heuristicate($value) {
+    if (empty($value)) { return $value; }
     global $ISO_3166_1_countries;
     include "ISO-3166-1.php";
 
@@ -1531,23 +1682,30 @@ class CountryFormField extends StateFormField {
 //
 class ZIPFormField extends PatternFormField {
 
-  function ZIPFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
+  function ZIPFormField ($name, $description, $optional=false, $options=NULL) {
     global $mobile;
-    parent::PatternFormField($name, $description, $optional, $annotation, $instance);
-    // Override the default
-    $this->maxlength = 10;
-    $this->pattern = "/^([0-9]{5,5})-?([0-9]{4,4})?$/";
-    // [2012-12-12 ptw] Mobile Webkit inserts commas if you use 'number'
-    $this->type = $mobile ? "tel" : "text";
-    $this->title = "ZIP code";
-    $this->placeholder = '01234-5678';
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      // [2012-12-12 ptw] Mobile Webkit inserts commas if you use 'number'
+      ,'type' => $mobile ? "tel" : "text"
+      ,'maxlength' => 10
+      ,'pattern' => "/^([0-9]{5,5})-?([0-9]{4,4})?$/"
+      ,'title' => "ZIP code"
+      ,'placeholder' => "01234-5678"
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::PatternFormField($name, $description, $optional, $options);
   }
 
   function canonical ($value) {
     $value = parent::canonical($value);
     $matches = array();
-    preg_match($this->pattern, $value, $matches);
-    return $matches[1];
+    if (preg_match($this->pattern, $value, $matches)) {
+      return $matches[1];
+    }
+    return NULL;
   }
 
   // ZIP-codes want to be a string, not a number
@@ -1573,13 +1731,19 @@ class ZIPFormField extends PatternFormField {
 //
 class PostalCodeFormField extends FormField {
 
-  function PostalCodeFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
-    parent::FormField($name, $description, $optional, $annotation, $instance);
+  function PostalCodeFormField ($name, $description, $optional=false, $options=NULL) {
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      // [2012-12-12 ptw] Mobile Webkit inserts commas if you use 'number'
+      ,'type' => "text"
+      ,'title' => "Postal code"
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
     // Can't really do any validation on postal codes, they are too random!
     // We can't know if the postal code is all numeric or not
-    $this->type = "text";
-    $this->title = "Postal Code";
-    $this->placeholder = '01234-5678';
+    // Hence simple text field, rather than pattern
+    parent::FormField($name, $description, $optional, $options);
   }
 }
 
@@ -1588,36 +1752,37 @@ class PostalCodeFormField extends FormField {
 //
 class PhoneFormField extends PatternFormField {
 
-  function PhoneFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
+  function PhoneFormField ($name, $description, $optional=false, $options=NULL) {
     global $html5;
-    parent::PatternFormField($name, $description, $optional, $annotation, $instance);
-    // Override the default
-    $this->type = $html5 ? "tel" : "text";
-    $this->maxlength = 16;
-    $this->pattern = "/^\(?([0-9]{3,3})\)?[-. ]?([0-9]{3,3})[-. ]?([0-9]{4,4})$/";
-    $this->title = "phone number";
-    $this->placeholder = "555-555-1234";
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      // [2012-12-12 ptw] Mobile Webkit inserts commas if you use 'number'
+      ,'type' => $html5 ? "tel" : "text"
+      ,'maxlength' => 16
+      ,'pattern' => "/^\(?([0-9]{3,3})\)?[-. ]?([0-9]{3,3})[-. ]?([0-9]{4,4})$/"
+      ,'title' => "phone number"
+      ,'placeholder' => "555-555-1234"
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::PatternFormField($name, $description, $optional, $options);
   }
 
   function isvalid ($value) {
-    if (($value == $this->default) ||
-        ((! $this->required) && empty($value))) {
-      return (! $this->required);
+    if ((! $this->required) && empty($value)) {
+      return true;
     } else {
       return parent::isvalid($value);
     }
   }
 
   function canonical ($value) {
-    if ((! $this->required) &&
-        (($value == $this->default) || empty($value))) {
-      unset($value);
-      return $value;
-    }
     $value = parent::canonical($value);
     $matches = array();
-    preg_match($this->pattern, $value, $matches);
-    return $matches[1] . "-" . $matches[2] . "-" . $matches[3];
+    if (preg_match($this->pattern, $value, $matches)) {
+      return $matches[1] . "-" . $matches[2] . "-" . $matches[3];
+    }
+    return NULL;
   }
 }
 
@@ -1636,23 +1801,26 @@ class DateFormField extends PatternFormField {
   var $month;
   var $day;
 
-  function DateFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
+  function DateFormField ($name, $description, $optional=false, $options=NULL) {
     global $mobile;
     $this->ISO = $mobile;
-    parent::PatternFormField($name, $description, $optional, $annotation, $instance);
-    // Override the default
-    $this->type = $this->ISO ? "date" : "text";
-    $this->maxlength = 16;
-    // We want ISO format always, heuristicate Local if necessary
-    $this->pattern = $this->ISOPattern;
-    $this->title = "date";
-    $this->placeholder = $this->ISO ? date("Y-m-d") : date("m/d/y");
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'type' => $this->ISO ? "date" : "text"
+      ,'maxlength' => 16
+      // We want ISO format always, heuristicate Local if necessary
+      ,'pattern' => $this->ISOPattern
+      ,'title' => "date"
+      ,'placeholder' => $this->ISO ? date("Y-m-d") : date("m/d/y")
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::PatternFormField($name, $description, $optional, $options);
   }
 
   function isvalid ($value) {
-    if (($value == $this->default) ||
-        ((! $this->required) && empty($value))) {
-      return (! $this->required);
+    if ((! $this->required) && empty($value)) {
+      return true;
     } else {
       return preg_match($this->ISOPattern, $value) || preg_match($this->LocalPattern, $value);
     }
@@ -1663,7 +1831,7 @@ class DateFormField extends PatternFormField {
   }
   
   function choice () {
-    if ($this->valid) {
+    if ((! empty($this->value)) && $this->isvalid($this->value)) {
       if ($this->ISO) {
         return $this->ISOValue();
       } else {
@@ -1675,11 +1843,6 @@ class DateFormField extends PatternFormField {
   }
   
   function canonical ($value) {
-    if ((! $this->required) &&
-        (($value == $this->default) || empty($value))) {
-      unset($value);
-      return $value;
-    }
     $value = parent::canonical($value);
     if (preg_match($this->ISOPattern, $value, $matches)) {
       $this->year = 1 * $matches[1];
@@ -1714,13 +1877,21 @@ class DateFormField extends PatternFormField {
 //
 class BirthdateFormField extends DateFormField {
 
-  function BirthdateFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
-    parent::DateFormField($name, $description, $optional, $annotation, $instance);
+  function BirthdateFormField ($name, $description, $optional=false, $options=NULL) {
+    global $mobile;
+    $this->ISO = $mobile;
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'title' => "birth date"
+      // 4-digit year for local pattern
+      ,'placeholder' => $this->ISO ? date("Y-m-d") : date("m/d/Y")
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::DateFormField($name, $description, $optional, $options);
     // Override the default
-    $this->title = "birth date";
     // Require 4-digit year
     $this->LocalPattern = "/^([01]?[0-9])[-\/ ]([0-3]?[0-9])[-\/ ]((?:[0-9]{2,2})?[0-9]{4,4})$/";
-    $this->placeholder = $this->ISO ? date("Y-m-d") : date("m/d/Y");
   }
 }
 
@@ -1737,22 +1908,25 @@ class DaytimeFormField extends PatternFormField {
   var $hour;
   var $minute;
   
-  function DaytimeFormField ($name, $description, $optional=false, $annotation="", $instance=NULL) {
+  function DaytimeFormField ($name, $description, $optional=false, $options=NULL) {
     global $mobile;
     $this->ISO = $mobile;
-    parent::PatternFormField($name, $description, $optional, $annotation, $instance);
-    // Override the default
-    $this->type = $this->ISO ? "time" : "text";
-    $this->maxlength = 8;
-    $this->pattern = $this->ISO ? $this->ISOPattern : $this->LocalPattern;
-    $this->title = "time";
-    $this->placeholder = $this->ISO ? date("H:i") : date("g:i a");
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'type' => $this->ISO ? "time" : "text"
+      ,'maxlength' => 8
+      ,'pattern' => $this->ISO ? $this->ISOPattern : $this->LocalPattern
+      ,'title' => "time"
+      ,'placeholder' => $this->ISO ? date("H:i") : date("g:i a")
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::PatternFormField($name, $description, $optional, $options);
   }
 
   function isvalid ($value) {
-    if (($value == $this->default) ||
-        ((! $this->required) && empty($value))) {
-      return (! $this->required);
+    if ((! $this->required) && empty($value)) {
+      return true;
     } else {
       // We want ISO format always, heuristicate Local if necessary
       return preg_match($this->ISOPattern, $value) || preg_match($this->LocalPattern, $value);
@@ -1778,11 +1952,6 @@ class DaytimeFormField extends PatternFormField {
   }
 
   function canonical ($value) {
-    if ((! $this->required) &&
-        (($value == $this->default) || empty($value))) {
-      unset($value);
-      return $value;
-    }
     $value = parent::canonical($value);
     if (preg_match($this->ISOPattern, $value, $matches)) {
       $this->hour = 1 * $matches[1];
@@ -1818,8 +1987,8 @@ class DaytimeFormField extends PatternFormField {
 //
 class TextAreaFormField extends FormField {
 
-  function TextAreaFormField($name, $description, $optional=false, $annotation="", $instance=NULL) {
-    parent::FormField($name, $description, $optional, $annotation, $instance);
+  function TextAreaFormField($name, $description, $optional=false, $options=NULL) {
+    parent::FormField($name, $description, $optional, $options);
   }
 
   // Create the HTML form element for inputting this field
@@ -1914,18 +2083,24 @@ function arrayToSimpleItems ($choices) {
   return $items;
 }
 
-
 ///
 // A FormField that has a limited set of choices
 //
-class ChoiceFormField extends FormField {
+class SimpleChoiceFormField extends FormField {
   // Array of possible choices
   var $choices;
   var $invalidChoice;
 
-  function ChoiceFormField($name, $description, $choices=NULL, $optional=false, $annotation="", $instance=NULL) {
-    parent::FormField($name, $description, $optional, $annotation, $instance);
-    $this->choices = $choices;
+  function SimpleChoiceFormField($name, $description, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'choices' => NULL
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::FormField($name, $description, $optional, $options);
+    $this->choices = $options['choices'];
     $this->invalidChoice = MD5('not_bloody_likely');
   }
   
@@ -1955,6 +2130,10 @@ class ChoiceFormField extends FormField {
   }
 
   function canonical($key) {
+    if ((! $this->required) &&
+        (($key == $this->invalidChoice) || empty($key))) {
+      return NULL;
+    }
     // The canonical value needs to be `===` to the array key
     // since that is how we determine selected
     return array_search($this->choices[$key], $this->choices);
@@ -1990,7 +2169,7 @@ class ChoiceFormField extends FormField {
 
   function SQLField() {
     // Coerce enums to the type we expect
-    $keys = is_array($this->choices) && array_keys($this->choices);
+    $keys = is_array($this->choices) ? array_keys($this->choices) : NULL;
     $field = parent::SQLField();
     if ($keys && is_numeric($keys[0])) {
       return "{$field}+0 AS {$field}";
@@ -2023,16 +2202,37 @@ class ChoiceFormField extends FormField {
   }  
 }
 
+///
+// Back-compatibility
+//
+class ChoiceFormField extends SimpleChoiceFormField {
+  function ChoiceFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'choices' => $choices
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleChoiceFormField($name, $description, $optional, $options);
+  }
+}
 
 ///
 // A FormField that will be represented as a radio button
 //
 // @param choices:array An array of the possible choices
-class RadioFormField extends ChoiceFormField {
+class SimpleRadioFormField extends ChoiceFormField {
 
-  function RadioFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
-    parent::ChoiceFormField($name, $description, $choices, $optional, $annotation, $instance);
-    $this->type = 'radio';
+  function SimpleRadioFormField($name, $description, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'type' => 'radio'
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleChoiceFormField($name, $description, $optional, $options);
   }
 
   function HTMLFormElement() {
@@ -2092,19 +2292,48 @@ QUOTE;
 }
 
 ///
+// Back-compatibility
+//
+class RadioFormField extends SimpleRadioFormField {
+  function RadioFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'choices' => $choices
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleRadioFormField($name, $description, $optional, $options);
+  }
+}
+
+///
 // A FormField that has a limited set of choices, but allows more than
 // one choice.
 //
-class MultipleChoiceFormField extends ChoiceFormField {
+class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
 
-  function MultipleChoiceFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
-    parent::ChoiceFormField($name, $description, $choices, $optional, $annotation, $instance);
+  function SimpleMultipleChoiceFormField($name, $description, $optional=false, $options=NULL) {
+    parent::SimpleChoiceFormField($name, $description, $optional, $options);
+  }
+  
+  function unpack($value) {
+    $keyarray = array();
+    foreach ($this->choices as $key => $val) {
+      if (((1 << $key) & $value) != 0) {
+        $keyarray[] = $key;
+      }
+    }
+    return $keyarray;
   }
 
   function isvalid($keyarray) {
     // Optional implies you don't need to have _any_ choices
     $valid = (! $this->required);
-    if (isset($keyarray)) {
+    if (is_numeric($keyarray)) {
+      $keyarray = $this->unpack($keyarray);
+    }
+    if (is_array($keyarray)) {
       foreach ($keyarray as $key) {
         // Can't check isset, because we want to allow NULL as a possible
         // value
@@ -2124,10 +2353,13 @@ class MultipleChoiceFormField extends ChoiceFormField {
   function canonical($keyarray) {
     // The canonical value array needs to have elements `===` to the
     // choices keys since that is how we determine selected
-    if (isset($keyarray)) {
+    if (is_numeric($keyarray)) {
+      $keyarray = $this->unpack($keyarray);
+    }
+    if (is_array($keyarray)) {
       return array_intersect(array_keys($this->choices), $keyarray);
     }
-    return null;
+    return NULL;
   }
 
   // We have to be a little more particular here
@@ -2219,13 +2451,29 @@ class MultipleChoiceFormField extends ChoiceFormField {
 }
 
 ///
+// Back-compatibility
+//
+class MultipleChoiceFormField extends SimpleMultipleChoiceFormField {
+  function MultipleChoiceFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'choices' => $choices
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleMultipleChoiceFormField($name, $description, $optional, $options);
+  }
+}
+
+///
 // A FormField that will be represented as a checkbox
 //
 // @param choices:array An array of the possible choices
-class CheckboxFormField extends MultipleChoiceFormField {
+class SimpleCheckboxFormField extends SimpleMultipleChoiceFormField {
 
-  function CheckboxFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
-    parent::MultipleChoiceFormField($name, $description, $choices, $optional, $annotation, $instance);
+  function CheckboxFormField($name, $description, $optional=false, $options=NULL) {
+    parent::SimpleMultipleChoiceFormField($name, $description, $optional, $options);
   }
 
   function HTMLFormElement() {
@@ -2310,13 +2558,29 @@ class RequiredCheckboxFormField extends CheckboxFormField {
 }
 
 ///
+// Back-compatibility
+//
+class CheckboxFormField extends SimpleCheckboxFormField {
+  function CheckboxFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'choices' => $choices
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleCheckboxFormField($name, $description, $optional, $options);
+  }
+}
+
+///
 // A FormField that will be represented as a pull-down menu
 //
 // @param choices:array An array of the possible choices
-class MenuFormField extends ChoiceFormField {
+class SimpleMenuFormField extends SimpleChoiceFormField {
 
-  function MenuFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
-    parent::ChoiceFormField($name, $description, $choices, $optional, $annotation, $instance);
+  function MenuFormField($name, $description, $optional=false, $options=NULL) {
+    parent::SimpleChoiceFormField($name, $description, $optional, $options);
   }
 
   // Writes out a <select> tag with a fake first option that
@@ -2362,15 +2626,33 @@ QUOTE;
   }
 }
 
+///
+// Back-compatibility
+//
+class MenuFormField extends SimpleMenuFormField {
+  function MenuFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'choices' => $choices
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleMenuFormField($name, $description, $optional, $options);
+  }
+}
 
 ///
 // A TimeFormField lets you pick a time in a range at particular
 // intervals.
-class TimeFormField extends MenuFormField {
+class SimpleTimeFormField extends SimpleMenuFormField {
 
-  function TimeFormField($name, $description, $start, $end, $interval, $optional=false, $annotation="", $instance=NULL) {
+  function TimeFormField($name, $description, $optional=false, $options=NULL) {
     global $html5;
     $choices = array();
+    $start = $options['start'];
+    $end = $options['end'];
+    $interval = $options['interval'];
     for ($i = $start; $i <= $end; $i += $interval) {
       $hour = floor($i);
       $minute = floor(($i - $hour) * 60);
@@ -2378,8 +2660,15 @@ class TimeFormField extends MenuFormField {
       if ($hour > 12) { $hour -= 12; }
       $choices[] = $hour . ":" . ($minute < 10 ? "0" : "") . $minute . $m;
     }
-    parent::MenuFormField($name, $description, $choices, $optional, $annotation, $instance);
-    $this->type = $html5 ? "time" : "text";
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'type' => $html5 ? "time" : "text"
+      ,'choices' => $choices
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleMenuFormField($name, $description, $optional, $options);
   }
 
   // Output 24-hour SQL time
@@ -2392,6 +2681,25 @@ class TimeFormField extends MenuFormField {
   }
   function SQLType() {
     return "TIME";
+  }
+}
+
+
+///
+// Back-compatibility
+//
+class TimeFormField extends SimpleTimeFormField {
+  function TimeFormField($name, $description,$start, $end, $interval, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'start' => $start
+      ,'end' => $end
+      ,'interval' => $interval
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleTimeFormField($name, $description, $optional, $options);
   }
 }
 
@@ -2422,10 +2730,10 @@ class MenuItem {
 // Non MenuItem entries may be included in the choices to 'document'
 // your menu inline.
 //
-class MenuItemFormField extends MenuFormField {
+class SimpleMenuItemFormField extends SimpleMenuFormField {
 
-  function MenuItemFormField($name, $description, $classes, $optional=false, $annotation="", $instance=NULL) {
-    parent::MenuFormField($name, $description, $classes, $optional, $annotation, $instance);
+  function SimpleMenuItemFormField($name, $description, $optional=false, $options=NULL) {
+    parent::SimpleMenuFormField($name, $description, $optional, $options);
   }
 
   // Override to make sure they don't choose a separator
@@ -2486,6 +2794,22 @@ QUOTE;
     } else {
       return "";
     }
+  }
+}
+
+///
+// Back-compatibility
+//
+class MenuItemFormField extends SimpleMenuItemFormField {
+  function MenuItemFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'choices' => $choices
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleMenuItemFormField($name, $description, $optional, $options);
   }
 }
 

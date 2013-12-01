@@ -13,18 +13,20 @@ class FileFormField extends PatternFormField {
   // will appear to the right of the form
   // @param directory:String (optional) Name of the directory files
   // should be uploaded to
-  function FileFormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0,
-                          $options=NULL) {
-    $defaultoptions = array('directory' => 'files', 'maxsize' => 8388608);
+  function FileFormField ($name, $description, $optional=false, $options=NULL) {
+    $defaultoptions = array(
+      'type' => 'file'
+      ,'title' => 'file'
+      ,'placeholder' => 'file.ext'
+      // Limit how crazy the file name can be
+      ,'pattern' => "/^(\\w| |[-_\\.]){1,64}$/"
+      ,'directory' => 'files'
+      ,'maxsize' => 8388608
+    );
     $options = $options ? array_merge($defaultoptions, $options) : $options;
-    parent::PatternFormField($name, $description, $optional, $annotation, $instance=NULL, $priority=0);
+    parent::PatternFormField($name, $description, $optional, $options);
     $this->directory = $options['directory'];
     $this->maxsize = $options['maxsize'];
-    $this->type = "file";
-    $this->title = "file";
-    $this->placeholder = "file.ext";
-    // Limit how crazy the file name can be
-    $this->pattern = "/^(\\w| |[-_\\.]){1,64}$/";
   }
 
   function HTMLTableColumn() {
@@ -38,7 +40,7 @@ QUOTE;
     // For unknown reasons, the MAX_FILE_SIZE input has to come first
     $element .= parent::HTMLTableColumn();
     // File forms can be inscrutible if they are autosubmitted (e.g., images)
-    if ($this->autosubmit && $this->hasValue() && (! $this->isvalid($this->value))) {
+    if ($this->autosubmit && (! empty($this->value)) && (! $this->isvalid($this->value))) {
       $msg = "'{$this->HTMLValue()}' is not a valid {$this->title}";
       if ($this->error) {
         $msg .= " ({$this->error})";
@@ -155,7 +157,7 @@ QUOTE;
     } else if (array_key_exists($input, $source)) {
       $filename = $source[$input];
     }
-    if (parent::isvalid($filename)) {
+    if ((! empty($filename)) && $this->isvalid($filename)) {
       $filename = $this->canonical($filename);
       $filepath = $this->filepath($filename);
       if ($uploading) {
@@ -202,9 +204,9 @@ QUOTE;
             break;
         }
       }
-      if ($this->isvalid($filename)) {
-        $valid = true;
-      }
+    }
+    if ($this->isvalid($filename)) {
+      $valid = true;
     }
     $this->value = $filename;
     $this->valid = $valid;
@@ -216,24 +218,26 @@ class ImageFormField extends FileFormField {
   var $store;
   var $width;
   var $height;
-  var $idname;
   var $img;
   var $path;
   var $info;
   
-  function ImageFormField ($name, $description, $optional=false, $annotation="", $instance=NULL, $priority=0,
-                          $options=NULL) {
-    $defaultoptions = array('directory' => 'images', 'store' => NULL, 'width' => NULL, 'height' => NULL, 'idname' => 'id');
+  function ImageFormField ($name, $description, $optional=false, $options=NULL) {
+    $defaultoptions = array(
+      'title' => 'image'
+      ,'placeholder' => 'name.png'
+      // This lets us refresh the form with the chosen image
+      ,'autosubmit' => true
+      ,'directory' => 'images'
+      ,'store' => NULL
+      ,'width' => NULL
+      ,'height' => NULL
+    );
     $options = $options ? array_merge($defaultoptions, $options) : $options;
-    parent::FileFormField($name, $description, $optional, $annotation, $instance, $priority, $options);
+    parent::FileFormField($name, $description, $optional, $options);
     $this->store = $options['store'];
     $this->width = $options['width'];
     $this->height = $options['height'];
-    $this->idname = $options['idname'];
-
-    $this->title = "image";
-    // This lets us refresh the form with the chosen image
-    $this->autosubmit = true;
   }
 
   function setForm($form) {
@@ -249,7 +253,7 @@ class ImageFormField extends FileFormField {
 
   function HTMLFormElement() {
     global $debugging;
-    $valid = $this->isvalid($this->value);
+    $valid = (! empty($this->value)) && $this->isvalid($this->value);
     if ($debugging > 1) {
       echo "<pre>valid: {$valid}; value: {$this->value}; path: {$this->path}</pre>";
     }
@@ -266,8 +270,6 @@ class ImageFormField extends FileFormField {
       $element =
 <<<QUOTE
 
-          <!-- Ensures our value is returned to us -->
-          <input type="hidden" name="{$this->input}" id="{$this->id}_hidden" value="{$this->value}">
           <div style="
             position: relative;
           ">
@@ -415,7 +417,7 @@ QUOTE;
   function parseValue($source) {
     global $debugging;
     $input = $this->input;
-    $valid = parent::parseValue($source) && ($this->contentAccess() == 'file');
+    $valid = parent::parseValue($source) && (! empty($this->value)) && ($this->contentAccess() == 'file');
     if ($debugging > 2) {
       echo "<pre>valid: {$valid}; value: {$this->value}</pre>";
     }
@@ -444,7 +446,7 @@ QUOTE;
         return $this->valid = true;
       }
     }
-    return $this->valid = $valid;
+    return $this->valid = $valid || (! $this->required);
   }
   
   function finalize() {
@@ -460,10 +462,10 @@ QUOTE;
   function HTMLValue() {
     // Can't use $this->valid as the form starts out valid
     $value = parent::HTMLValue();
-    if ($this->isvalid($this->value)) {
+    if ((! empty($this->value)) && $this->isvalid($this->value)) {
       switch ($this->contentAccess()) {
         case 'sql':
-          $id = urlencode($this->form->fieldValue($this->idname));
+          $id = urlencode($this->form->recordID);
           $value = "<img id='{$this->id}' src='fetchasset.php5?&i={$id}' />";
           break;
         case 'file':
