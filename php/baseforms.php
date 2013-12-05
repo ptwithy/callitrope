@@ -311,7 +311,20 @@ class Form {
       // First time:  clear the back-compatible value
       $this->process = NULL;
     }
+    $fields = array_filter($this->fields, 'is_field');
+    foreach ($fields as $field) {
+      $field->initialize();
+    }  
   }
+
+  // Output anything the form might need in the <head> tag
+  function head() {
+    $fields = array_filter($this->fields, 'is_field');
+    foreach ($fields as $field) {
+      $field->head();
+    }  
+  }
+  
   
   function isValidPost() {
     return array_key_exists('process', $_POST) && ($_POST['process'] == $this->process);
@@ -405,6 +418,7 @@ class Form {
   // Returns a string representing the HTML version of the form
   // enctype="multipart/form-data" required to allow file uploads (for FileFormField)
   function HTMLForm($process=null, $buttons=null) {
+    global $debugging;
     // We allow passing in a token, but discourage it
     if ($process == null) {
       if ($this->process == 1) {
@@ -626,7 +640,13 @@ QUOTE;
   // @param validate:Boolean (optional) whether or not to validate
   // the values.  Default is true
   function parseValues($source=NULL, $validate=true) {
+    global $debugging;
     if ($source == NULL) { $source = $this->method == "post" ? $_POST : $_GET; }
+    if ($debugging > 2) {
+      echo "<pre>\$source: ";
+      print_r($source);
+      echo "</pre>";
+    }
     $ok = true;
     $errors = array();
     // See "PHP sucks" above
@@ -1156,6 +1176,12 @@ class FormField {
     // If the posted value is valid, store it
     $this->setValue($v);
     return $this->valid;
+  }
+
+  function head() {
+  }
+  
+  function initialize() {
   }
   
   function finalize() {
@@ -2602,7 +2628,7 @@ class SimpleMenuFormField extends SimpleChoiceFormField {
 <<<QUOTE
 
       <select{$class} name="{$this->input}" id="{$this->id}"{$additional}>
-        <option>Select {$this->description}</option>
+        <option value="{$this->invalidChoice}">Select {$this->description}</option>
 QUOTE;
     foreach ($this->choices as $key => $value) {
       $selected = ($this->value === $key) ? " selected" : "";

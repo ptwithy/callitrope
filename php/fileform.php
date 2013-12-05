@@ -1,4 +1,42 @@
 <?php
+
+/**
+ * Copyright (c) 2012, 2013 callitrope
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * File form field
+ *
+ * Prompts for a file to upload
+ *
+ * Key options:
+ *   - directory: the directory to upload the files to
+ *   - mazsize: limit on upload file size
+ */
 class FileFormField extends PatternFormField {
   var $directory;
   var $maxsize;
@@ -214,6 +252,25 @@ QUOTE;
   }
 }
 
+
+
+/**
+ * Image form field
+ *
+ * Prompts for an image to upload
+ *
+ * Key options:
+ *   - directory: the directory to upload the images to
+ *     must be accessible to the browser if you want previews
+ *   - mazsize: limit on upload image size
+ *   - width, height:  specify either or both to resize on upload
+ *   - crop: true or a set of Jcrop options to crop first
+ *
+ * Relies on http://deepliquid.com/content/Jcrop.html jQuery library
+ * which must be installed at:
+ *   js/jquery.Jcrop.min.js
+ *   css/jquery.Jcrop.css
+ */
 class ImageFormField extends FileFormField {
   var $store;
   var $width;
@@ -221,6 +278,7 @@ class ImageFormField extends FileFormField {
   var $img;
   var $path;
   var $info;
+  var $crop;
   
   function ImageFormField ($name, $description, $optional=false, $options=NULL) {
     $defaultoptions = array(
@@ -232,12 +290,14 @@ class ImageFormField extends FileFormField {
       ,'store' => NULL
       ,'width' => NULL
       ,'height' => NULL
+      ,'crop' => NULL
     );
     $options = $options ? array_merge($defaultoptions, $options) : $options;
     parent::FileFormField($name, $description, $optional, $options);
     $this->store = $options['store'];
     $this->width = $options['width'];
     $this->height = $options['height'];
+    $this->crop = $options['crop'];
   }
 
   function setForm($form) {
@@ -267,8 +327,10 @@ class ImageFormField extends FileFormField {
       // then the image itself
       //
       // See http://www.quirksmode.org/dom/inputfile.html
-      $element =
-<<<QUOTE
+      $cropping = $this->crop && $this->contentAccess() == 'file';
+      $element = "";
+      if (! $cropping) {
+        $element .= <<<QUOTE
 
           <div style="
             position: relative;
@@ -297,11 +359,25 @@ class ImageFormField extends FileFormField {
               "
             >
 QUOTE;
+      }
       $element .= $this->HTMLValue();
-      $element .= <<<QUOTE
+      if (! $cropping) {
+        $element .= <<<QUOTE
+              </div>
             </div>
-          </div>
 QUOTE;
+      } else {
+        $element .= <<<QUOTE
+
+          <!-- Cropping inputs -->
+          <input type="hidden" id="{$this->id}_x" name="{$this->id}_x" />
+          <input type="hidden" id="{$this->id}_y" name="{$this->id}_y" />
+          <input type="hidden" id="{$this->id}_w" name="{$this->id}_w" />
+          <input type="hidden" id="{$this->id}_h" name="{$this->id}_h" />
+          <input type="submit" id="{$this->id}_crop" name="{$this->id}_crop" value="Crop Image" />
+          <input name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$this->value}" />
+QUOTE;
+      }
       return $element;
     }
     // If there is no image yet, just 
@@ -347,17 +423,32 @@ QUOTE;
 
   // Resizes the file before moving it if width/height are set
   function moveFile($tempname, $filepath) {
-    if (($this->width != NULL) || ($this->height != NULL)) {
-      return $this->moveFileWithResize($tempname, $filepath, $this->width, $this->height);
-    } else {
+    if ($this->crop || ($this->width == NULL) && ($this->height == NULL)) {
       return parent::moveFile($tempname, $filepath);
+    } else {
+      return $this->moveFileWithResize($tempname, $filepath, $this->width, $this->height);
     }
   }
 
   // http://stackoverflow.com/questions/14649645/resize-image-in-php
   // http://salman-w.blogspot.com/2008/10/resize-images-using-phpgd-library.html
-  function moveFileWithResize($tempfile, $filepath, $w, $h) {
+  function moveFileWithResize($tempfile, $filepath, $w, $h, $crop=NULL) {
     list($width, $height, $image_type) = getimagesize($tempfile);
+    switch ($image_type) {
+      case IMAGETYPE_GIF: $src = imagecreatefromgif($tempfile); break;
+      case IMAGETYPE_JPEG: $src = imagecreatefromjpeg($tempfile); break;
+      case IMAGETYPE_PNG: $src = imagecreatefrompng($tempfile); break;
+      default:  trigger_error('Unsupported filetype!', E_USER_WARNING);  break;
+    }
+    unlink($tempfile);
+    $x = 0;
+    $y = 0;
+    if (is_array($crop)) {
+      $x = $crop['x'];
+      $y = $crop['y'];
+      $width = $crop['w'];
+      $height = $crop['h'];
+    }
     $source_aspect = $width / $height;
     if ($w && (!$h)) { $h = $w / $source_aspect; }
     if ($h && (!$w)) { $w = $h * $source_aspect; }
@@ -373,15 +464,8 @@ QUOTE;
       $newwidth = $w;
       $newheight = $w / $source_aspect;
     }
-    switch ($image_type) {
-      case IMAGETYPE_GIF: $src = imagecreatefromgif($tempfile); break;
-      case IMAGETYPE_JPEG: $src = imagecreatefromjpeg($tempfile); break;
-      case IMAGETYPE_PNG: $src = imagecreatefrompng($tempfile); break;
-      default:  trigger_error('Unsupported filetype!', E_USER_WARNING);  break;
-    }
-    unlink($tempfile);
     $dst = imagecreatetruecolor($newwidth, $newheight);
-    imagecopyresampled($dst, $src, 0, 0, 0, 0, $newwidth, $newheight, $width, $height);
+    imagecopyresampled($dst, $src, 0, 0, $x, $y, $newwidth, $newheight, $width, $height);
     imagedestroy($src);
     // We always resize to png
     $result = imagepng($dst, $filepath);
@@ -417,12 +501,22 @@ QUOTE;
   function parseValue($source) {
     global $debugging;
     $input = $this->input;
+
     $valid = parent::parseValue($source) && (! empty($this->value)) && ($this->contentAccess() == 'file');
     if ($debugging > 2) {
       echo "<pre>valid: {$valid}; value: {$this->value}</pre>";
     }
     if ($valid) {
       $filepath = $this->filepath($this->value);
+      $cropbutton = $this->id . '_crop';
+      if ($this->crop && isset($source[$cropbutton]) && $source[$cropbutton] == 'Crop Image') {
+        $crop = array();
+        $crop['x'] = $source[$this->id . '_x'];
+        $crop['y'] = $source[$this->id . '_y'];
+        $crop['h'] = $source[$this->id . '_h'];
+        $crop['w'] = $source[$this->id . '_w'];
+        $this->moveFileWithResize($filepath, $filepath, $this->width, $this->height, $crop);
+      }
       $this->setImage(file_get_contents($filepath));
       return $this->valid = $valid;
     }
@@ -448,7 +542,51 @@ QUOTE;
     }
     return $this->valid = $valid || (! $this->required);
   }
+
+  static $onetime = '
+
+    <!-- jquery needed for image cropping -->
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script src="js/jquery.Jcrop.min.js"></script>
+    <link rel="stylesheet" href="css/jquery.Jcrop.css" type="text/css" />
+';  
   
+  function head() {
+    parent::initialize();
+    if ($this->crop && $this->contentAccess() == 'file') {
+      echo self::$onetime;
+      self::$onetime = "";
+      $options = "";
+      if (is_array($this->crop)) {
+        foreach ($this->crop as $key => $value) {
+          $options .= "{$key}: " . PHPtoSQL($value) . ",";
+        }
+      }
+      echo <<<QUOTE
+      
+        <script type="text/javascript">
+
+          \$(function(){
+
+            \$('#{$this->id}_img').Jcrop({
+              {$options}
+              onSelect: {$this->id}_updateCoords
+            });
+
+          });
+
+          function {$this->id}_updateCoords(c)
+          {
+            \$('#{$this->id}_x').val(c.x);
+            \$('#{$this->id}_y').val(c.y);
+            \$('#{$this->id}_w').val(c.w);
+            \$('#{$this->id}_h').val(c.h);
+          };
+        </script>
+QUOTE;
+    }
+  }
+
   function finalize() {
     if ($this->store == 'sql') {
       $this->clearImage();
@@ -466,12 +604,12 @@ QUOTE;
       switch ($this->contentAccess()) {
         case 'sql':
           $id = urlencode($this->form->recordID);
-          $value = "<img id='{$this->id}' src='fetchasset.php5?&i={$id}' />";
+          $value = "<img id='{$this->id}_img' src='fetchasset.php5?&i={$id}' />";
           break;
         case 'file':
         default:
           $webpath = $this->webpath($this->value);
-          $value = "<img id='{$this->id}' src='{$webpath}' />";
+          $value = "<img id='{$this->id}_img' src='{$webpath}' />";
           break;
       }
     }

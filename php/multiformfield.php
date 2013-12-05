@@ -27,18 +27,33 @@ class FormMultiField extends FormField {
     foreach ($this->fields as $key => $field) { 
       $field->setForm($form);
     }
+    $fields = array();
+    // Adjust field keys to be field id's
+    foreach ($this->fields as $field) {
+      $fields[$field->id] = $field;
+    }
   }
 
   // A non-required field is only valid if all of its required
   // subfields are either valid or empty
   function isvalid ($value) {
     $valid = true;
+    // Initially, required comes from us
+    $required = $this->required;
     foreach ($this->fields as $key => $field) {
-      if (! $field->isvalid($value[$key])) {
-        $valid = false;
+      if ($field->isvalid($value[$key])) {
+        if ($field->required) {
+          // We got a valid required field, that makes us required
+          $required = true;
+        }
+      } else {
+        if ($field->required) {
+          // We got an invalid required field, that makes us invalid
+          $valid = false;
+        }
       }
     }
-    return (! $this->required) || $valid;
+    return (! $required) || $valid;
   }
   
   function errorMessage() {
@@ -58,32 +73,30 @@ class FormMultiField extends FormField {
     return $result;
   }
   
+  function isPresent($source) {
+    // If any sub-field is present, we are present
+    foreach ($this->fields as $key => $field) {
+      if ($field->isPresent($source)) { return true; }
+    }
+    return false;
+  }  
+  
   // If any of the sub-fields are required, but the field itself is
   // optional, we either require all or none of the required subfields
   // to be valid.
   function parseValue($source=null) {
-    if ($source == null) { $source = $_POST; }
     $value = array();
     $valid = true;
     // Initially, required comes from us
     $required = $this->required;
     foreach ($this->fields as $key => $field) {
-      if ($field->parseValue($source)) {
+      if ($field->isPresent($source)) {
+        $field->parseValue($source);
         $value[$key] = $field->value;
-        if ($field->required) {
-          // We got a valid required field, that makes us required
-          $required = true;
-        }
-      } else {
-        $value[$key] = $field->value;
-        if ($field->required) {
-          $valid = false;
-        }
       }
     }
-    $this->value = $value;
-    $this->valid = $valid;
-    return $valid || (! $required);
+    $this->setValue($value);
+    return $this->valid;
   }
 
   // Custom column builder
