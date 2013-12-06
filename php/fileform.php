@@ -365,8 +365,11 @@ QUOTE;
         $element .= <<<QUOTE
               </div>
             </div>
+          <!-- styleable replace button -->
+          <input type="button" id="{$this->id}_replace" name="{$this->id}_replace"value="Replace Image" onclick="document.getElementById('{$this->id}').click()" />
 QUOTE;
-      } else {
+      }
+      if ($cropping) {
         $element .= <<<QUOTE
 
           <!-- Cropping inputs -->
@@ -375,7 +378,10 @@ QUOTE;
           <input type="hidden" id="{$this->id}_w" name="{$this->id}_w" />
           <input type="hidden" id="{$this->id}_h" name="{$this->id}_h" />
           <input type="submit" id="{$this->id}_crop" name="{$this->id}_crop" value="Crop Image" />
-          <input name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$this->value}" />
+          <!-- styleable replace button -->
+          <input type="button" id="{$this->id}_replace" name="{$this->id}_replace"value="Replace Image" onclick="document.getElementById('{$this->id}').click()" />
+          <!-- actual image upload button, not displayed because it is not styleable -->
+          <input name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$this->value}" onchange="document.forms[0].submit()" style="visibility: hidden;" />
 QUOTE;
       }
       return $element;
@@ -444,10 +450,18 @@ QUOTE;
     $x = 0;
     $y = 0;
     if (is_array($crop)) {
-      $x = $crop['x'];
-      $y = $crop['y'];
-      $width = $crop['w'];
-      $height = $crop['h'];
+      if ($crop['x'] > 0) {
+        $x = $crop['x'];
+      }
+      if ($crop['y'] > 0) {
+        $y = $crop['y'];
+      }
+      if ($crop['w'] > 0) {
+        $width = $crop['w'];
+      }
+      if ($crop['h'] > 0) {
+        $height = $crop['h'];
+      }
     }
     $source_aspect = $width / $height;
     if ($w && (!$h)) { $h = $w / $source_aspect; }

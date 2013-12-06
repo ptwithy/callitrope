@@ -155,6 +155,8 @@ class Form {
   var $usedivs;
   // Error array from parsing
   var $errorMessages;
+  // Whether the form is being validated
+  var $validate = false;
   // Whether the form is complete or not
   var $complete = false;
   // The auto-generated process token (1 is the back-compatible value, overridden by initialize)
@@ -434,13 +436,13 @@ class Form {
       $_SESSION['process'] = $process;
     }
     
-  
     if (! $buttons) {
       $buttons =
 <<<QUOTE
       <input type="submit" name="submitButton" value="Submit Form">&nbsp;&nbsp;&nbsp;<input type="reset" value="Reset Form">
 QUOTE;
     }
+
     $html = "";
     if (count($this->errorMessages) > 0) {
       $html .=
@@ -465,6 +467,15 @@ QUOTE;
 <<<QUOTE
 
   <form class="{$this->name}" name="{$this->name}" method="{$this->method}" action="{$this->action}" enctype="multipart/form-data">
+QUOTE;
+    // This prevents the enter key from accidentally submitting the form
+    // The 'first' submit button in the form is triggered by the enter key
+    // We could have this key trampoline to the key we _do_ want to be the default
+    // http://stackoverflow.com/questions/1963245/multiple-submit-buttons-specifying-default-button
+    $html .=
+<<<QUOTE
+
+      <input type="submit" style="position: absolute; left: -100%;" onclick="return false" >
 QUOTE;
     $html .= $this->HTMLFormTable();
     $html .=
@@ -672,6 +683,7 @@ QUOTE;
       }
     }
     if ($validate) {
+      $this->validate = true;
       $this->errorMessages = $errors;
     }
     $this->complete = $ok;
@@ -1255,7 +1267,8 @@ class FormField {
     $additional = $this->additionalInputAttributes();
     if (isset($this->value)) {
       $val = $this->HTMLValue();
-      if (! $this->valid) {
+      // Only set invalid class when displaying errors
+      if ($this->form->validate && (! $this->valid)) {
         $class = ' class="invalid"';
         $onfocus =
 <<<QUOTE
@@ -2020,7 +2033,7 @@ class TextAreaFormField extends FormField {
   // Create the HTML form element for inputting this field
   function HTMLFormElement() {
     // Higlight incorrect values
-    $class = $this->valid ? "" : ' class="invalid"';
+    $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
     // Only insert the current value if it is valid.
     $val = ($this->hasvalue()) ? $this->HTMLValue() :  htmlspecialchars($this->default, ENT_QUOTES);
     return
@@ -2265,7 +2278,7 @@ class SimpleRadioFormField extends ChoiceFormField {
     global $debugging;
     $additional = $this->additionalInputAttributes();
     // Higlight incorrect values
-    $class = $this->valid ? "" : ' class="invalid"';
+    $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
     $element = "";
     // Debugging
     if ($debugging > 2) {
@@ -2505,7 +2518,7 @@ class SimpleCheckboxFormField extends SimpleMultipleChoiceFormField {
   function HTMLFormElement() {
     global $debugging;
     // Higlight incorrect values
-    $class = $this->valid ? "" : ' class="invalid"';
+    $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
     $element = "";
     // Debugging
     if ($debugging > 2) {
@@ -2615,7 +2628,7 @@ class SimpleMenuFormField extends SimpleChoiceFormField {
     global $debugging;
     $additional = $this->additionalInputAttributes();
     // Higlight incorrect values
-    $class = $this->valid ? "" : ' class="invalid"';
+    $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
     $element = '';
     // Debugging
     if ($debugging > 2) {
@@ -2771,7 +2784,7 @@ class SimpleMenuItemFormField extends SimpleMenuFormField {
   // Override to interpret separators and MenuItems
   function HTMLFormElement() {
     // Higlight incorrect values
-    $class = $this->valid ? "" : ' class="invalid"';
+    $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
     $element =
 <<<QUOTE
 
