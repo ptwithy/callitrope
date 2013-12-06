@@ -241,7 +241,7 @@ function lookup_from_table($db, $table, $key, $value, $sort = "", $where = "") {
     if (! empty($where)) {
         $selector .= " WHERE $where";
     }
-    $selector .= " ORDER BY $sort ASC";
+    $selector .= " ORDER BY $sort";
     $query = mysql_query($selector, $db) or ode();
     $array = array();
     while ($object = mysql_fetch_object($query)) {
