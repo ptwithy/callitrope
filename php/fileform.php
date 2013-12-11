@@ -123,7 +123,7 @@ QUOTE;
     global $debugging;
     switch (true) {
       case (! parent::isvalid($value)):
-        $this->error = "File name must be short and simple.";
+        $this->error = "File name must be short and simple";
         if ($debugging > 1) {
           $this->error .= " [" . $value . "]";
         }
@@ -211,16 +211,16 @@ QUOTE;
           case (! is_uploaded_file($tempname)):
             $this->error = "Invalid file";
             if ($debugging > 1) {
-              $this->error .= " [" . $tempname . "]";
+              $this->error .= " [{$tempname}]";
             }
             break;
           case (! $this->validType($tempname)):
             // validType sets error
             break;
           case ($size < 0 || $size > $this->maxsize):
-            $this->error = "File must be less than {$this->maxsize} bytes.";
+            $this->error = "File must be less than {$this->maxsize} bytes";
             if ($debugging > 1) {
-              $this->error .= " [" . $size . "]";
+              $this->error .= " [{$size}]";
             }
             break;
           case (!is_writable($this->dirpath())):
@@ -233,7 +233,7 @@ QUOTE;
           case (! $this->moveFile($tempname, $filepath)):
             $this->error = "Error moving";
             if ($debugging > 1) {
-              $this->error .= " [" . $tempname . " => " . $filepath . "]";
+              $this->error .= " [{$tempname} => {$filepath}]";
             }
             break;
           default:
@@ -317,32 +317,27 @@ class ImageFormField extends FileFormField {
     if ($debugging > 1) {
       echo "<pre>valid: {$valid}; value: {$this->value}; path: {$this->path}</pre>";
     }
+    $element = "";
+    $cropping = $this->crop && $this->contentAccess() == 'file';
+    // get all the attributes we would normally give the input field
+    $additional = $this->additionalInputAttributes();
+    $form = $this->form;
+    $formname = $form->name;
     if ($valid) {
       $info = $this->info;
-      // get all the attributes we would normally give the input field
-      $additional = $this->additionalInputAttributes();
       // See http://www.quirksmode.org/dom/inputfile.html
       // As modified by ptw:
       // Depending on whether we are cropping or not, we overlay the image
       // with a transparent file input button that auto-submits, or create 
       // an off screen file input
-      // We use a label for that button around a normal button to trigger the
-      // file input and still auto-submit without IE setting off an alarm
-      // Finally we have to kludge around IE only passing clicks to labels that
-      // contain text, not images...
-      $cropping = $this->crop && $this->contentAccess() == 'file';
-      $form = $this->form;
-      $formname = $form->name;
-      $element = "";
       if (! $cropping) {
-        $width = $info['width'];
-        $widthx2 = $width * 2;
         $element .= <<<QUOTE
 
           <div style="position: relative; overflow: hidden;">
             <div style="position: relative; z-index: 1;">
 QUOTE;
       }
+      // Here is the image
       $element .= $this->HTMLValue();
       if (! $cropping) {
         $element .= <<<QUOTE
@@ -351,7 +346,7 @@ QUOTE;
             <!-- Invisible file button ovelays the image -->
             <!-- text-align and font-size are to push the text box out of the frame -->
             <input
-              name="{$this->input}" id="{$this->id}_input" type="{$this->type}"{$additional} value="{$this->value}"
+              name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$this->value}"
               onmouseover="{this.title = 'click to edit'; this.style.cursor = 'pointer'}"
               onchange="document.getElementById('${formname}').submit()"
               style="
@@ -371,69 +366,80 @@ QUOTE;
               "
             />
           </div>
-          <div class="buttons">
 QUOTE;
       }
-      if ($cropping) {
-        $element .= <<<QUOTE
+    } // End valid
+    if ($cropping || (! $valid)) {
+      $element .= <<<QUOTE
+      
+          <!-- Off-screen input for when cropping or not valid -->
+          <input
+            name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$this->value}"
+            onchange="document.getElementById('${formname}').submit()"
+            style="position: absolute; left: -9999px;"
+          />
+QUOTE;
+    }      
+    $element .= <<<QUOTE
 
-            <!-- Cropping inputs -->
-            <input type="hidden" id="{$this->id}_x" name="{$this->id}_x" />
-            <input type="hidden" id="{$this->id}_y" name="{$this->id}_y" />
-            <input type="hidden" id="{$this->id}_w" name="{$this->id}_w" />
-            <input type="hidden" id="{$this->id}_h" name="{$this->id}_h" />
-            <input type="submit" id="{$this->id}_crop" name="{$this->id}_crop" value="Crop Image" />
-            <!-- Off-screen input for when cropping is in play, but we still might want a new image -->
-            <input
-              name="{$this->input}" id="{$this->id}_input" type="{$this->type}"{$additional} value="{$this->value}"
-              onchange="document.getElementById('${formname}').submit()"
-              style="position: absolute; left: -9999px;"
-            />
+        <div class="buttons">
 QUOTE;
-      }
+    if ($valid && $cropping) {
       $element .= <<<QUOTE
 
-            <!-- styleable replace button -->
-            <!-- using label to intecept click and send it to the file input element -->
-            <!-- so we don't trigger security alerts on IE -->
-            <label for="{$this->id}_input" id="{$this->id}_label">
-              <!-- IE will only let you click on text in a label, not an image -->
-              <!--[if IE]>
-              <div style="position: relative; overflow: hidden;">
-                <div style="position: relative; z-index: 1;">
-                  <input type="button" id="{$this->id}_replace" name="{$this->id}_replace" value="Replace Image" />
-                </div>
-                <div
-                    style="
-                      position: absolute;
-                      top: 0px;
-                      left: 0px;
-                      margin: 0;
-                      border: none;
-                      padding: 0;
-                      -moz-opacity:0 ;
-                      filter:alpha(opacity: 0);
-                      opacity: 0;
-                      z-index: 2;
-                      font-size: 50px;
-                      cursor: default;
-                    "
-                  >
-                  Replace Image
-                </div>
-              </div>
-              <![endif]-->
-              <!--[if !IE]> -->
-                <!-- This button is for "display only", so it looks like all other buttons -->
-                <input type="button" id="{$this->id}_replace" name="{$this->id}_replace" value="Replace Image" />
-              <!-- <![endif]-->
-            </label>
-          </div>
+          <!-- Cropping inputs -->
+          <input type="hidden" id="{$this->id}_x" name="{$this->id}_x" />
+          <input type="hidden" id="{$this->id}_y" name="{$this->id}_y" />
+          <input type="hidden" id="{$this->id}_w" name="{$this->id}_w" />
+          <input type="hidden" id="{$this->id}_h" name="{$this->id}_h" />
+          <input type="submit" id="{$this->id}_crop" name="{$this->id}_crop" value="Crop Image" />
 QUOTE;
-      return $element;
     }
-    // If there is no image yet, just 
-    return parent::HTMLFormElement();
+    $label = $valid ? "Replace Image" : "Choose Image";
+    // We use a label for the file input around a normal button to trigger the
+    // file input and still auto-submit without IE setting off an alarm
+    // Finally we have to kludge around IE only passing clicks to labels that
+    // contain text, not images...
+    $element .= <<<QUOTE
+
+          <!-- styleable replace/choose button -->
+          <!-- using label to intecept click and send it to the file input element -->
+          <!-- so we don't trigger security alerts on IE -->
+          <label for="{$this->id}" id="{$this->id}_label">
+            <!-- IE will only let you click on text in a label, not an image -->
+            <!--[if IE]>
+            <div style="position: relative; overflow: hidden;">
+              <div style="position: relative; z-index: 1;">
+                <input type="button" id="{$this->id}_button" value="{$label}" />
+              </div>
+              <div
+                  style="
+                    position: absolute;
+                    top: 0px;
+                    left: 0px;
+                    margin: 0;
+                    border: none;
+                    padding: 0;
+                    -moz-opacity:0 ;
+                    filter:alpha(opacity: 0);
+                    opacity: 0;
+                    z-index: 2;
+                    font-size: 50px;
+                    cursor: default;
+                  "
+                >
+                {$label}
+              </div>
+            </div>
+            <![endif]-->
+            <!--[if !IE]> -->
+              <!-- This button is for "display only", so it looks like all other buttons -->
+              <input type="button" id="{$this->id}_button" value="{$label}" />
+            <!-- <![endif]-->
+          </label>
+        </div>
+QUOTE;
+    return $element;
   }
   
   function validType($tempname) {
@@ -441,15 +447,21 @@ QUOTE;
     if (! parent::validType($tempname)) {
       return false;
     }
-    $imgdetails = getimagesize($tempname);
-    $mime_type = $imgdetails['mime'];
-    if(($mime_type != 'image/jpeg') && ($mime_type != 'image/gif') && ($mime_type != 'image/png')) {
-      $this->error = "Image must be jpeg, gif, or png.";
+    list($width, $height, $image_type) = getimagesize($tempname);
+    if(($image_type != IMAGETYPE_JPEG) && ($image_type != IMAGETYPE_GIF) && ($image_type != IMAGETYPE_PNG)) {
+      $this->error = "Image must be jpeg, gif, or png";
       if ($debugging > 1) {
-        $this->error .= ": " . $mime_type;
+        $this->error .= " [not {$image_type}]";
       }
       return false;
     }
+//     if ($this->crop && ($this->width != $width || $this->height != $height)) {
+//       $this->error = "Image must be cropped first.";
+//       if ($debugging > 1) {
+//         $this->error .= " [{$width} != {$this->width} || {$height} != {$this->height}]";
+//       }
+//       return false;
+//     }
     return true;
   }
   function contentAccess() {

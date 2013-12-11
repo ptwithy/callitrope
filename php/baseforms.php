@@ -91,7 +91,12 @@ function fieldInternal($name, $description=null, $type=null, $optional=false, $o
     case "birthdate":
       return new BirthdateFormField($name, $description, $optional, $options);
     case "daytime":
-      return new DaytimeFormField($name, $description, $optional, $options);
+    case "time":
+      if (array_key_exists('start', $options)) {
+        return new SimpleTimeFormField($name, $description, $optional, $options);
+      } else {
+        return new DaytimeFormField($name, $description, $optional, $options);
+      }
     case "text":
     case "area":
     case "textarea":
@@ -257,19 +262,10 @@ class Form {
   // a field, it will be added to this array.
   var $fields;
 
+  var $fieldOrder;
   // Sets the order of the fields in the form
   function setFieldOrder($ordering) {
-    $newfields = array();
-    $oldfields = $this->fields;
-    foreach ($ordering as $field) {
-      $newfields[$field] = $oldfields[$field];
-    }
-    foreach ($oldfields as $field => $value) {
-      if (!array_key_exists($field, $newfields)) {
-        $newfields[$field] = $value;
-      }
-    }
-    $this->fields = $newfields;
+    $this->fieldOrder = $ordering;
   }
 
   // These allow a form to have multiple sections.  Each section is
@@ -313,6 +309,27 @@ class Form {
       // First time:  clear the back-compatible value
       $this->process = NULL;
     }
+    // Put the fields in their proper order
+    // Default ordering to table order
+    if (! is_array($this->fieldOrder)) {
+      $this->fieldOrder = $this->columns;
+    }
+    if (is_array($this->fieldOrder)) {
+      $ordering = $this->fieldOrder;
+      $newfields = array();
+      $oldfields = $this->fields;
+      foreach ($ordering as $field => $value) {
+        if (array_key_exists($field, $oldfields)) {
+          $newfields[$field] = $oldfields[$field];
+        }
+      }
+      foreach ($oldfields as $field => $value) {
+        if (!array_key_exists($field, $newfields)) {
+          $newfields[$field] = $value;
+        }
+      }
+      $this->fields = $newfields;
+    }      
     $fields = array_filter($this->fields, 'is_field');
     foreach ($fields as $field) {
       $field->initialize();
@@ -2698,7 +2715,7 @@ class MenuFormField extends SimpleMenuFormField {
 // intervals.
 class SimpleTimeFormField extends SimpleMenuFormField {
 
-  function TimeFormField($name, $description, $optional=false, $options=NULL) {
+  function SimpleTimeFormField($name, $description, $optional=false, $options=NULL) {
     global $html5;
     $choices = array();
     $start = $options['start'];
@@ -2714,8 +2731,8 @@ class SimpleTimeFormField extends SimpleMenuFormField {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
-      'annotation' => is_string($options) ? $options : ''
-      ,'type' => $html5 ? "time" : "text"
+      'annotation' => (is_string($options) ? $options : '')
+      ,'type' => ($html5 ? "time" : "text")
       ,'choices' => $choices
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
