@@ -416,6 +416,26 @@ class Form {
       return $field->TextValue();
     }
   }
+  
+  function defaultSubmitButton() {
+    $button = "";
+    if ($this->editable && $this->recordID) {
+      // This prevents the enter key from accidentally submitting the form
+      // The 'first' submit button in the form is triggered by the enter key
+      // We could have this key trampoline to the key we _do_ want to be the default
+      // http://stackoverflow.com/questions/1963245/multiple-submit-buttons-specifying-default-button
+      $button = <<<QUOTE
+
+      <input type="submit" style="position: absolute; left: -100%;" onclick="return false" >
+QUOTE;
+    } else {
+      $button = <<<QUOTE
+
+      <input type="submit" name="submitButton" value="Submit Form" style="position: absolute; left: -100%;">    
+QUOTE;
+    }
+    return $button;
+  }
 
   // Returns a string representing the HTML version of the form
   // enctype="multipart/form-data" required to allow file uploads (for FileFormField)
@@ -466,17 +486,9 @@ QUOTE;
     $html .=
 <<<QUOTE
 
-  <form class="{$this->name}" name="{$this->name}" method="{$this->method}" action="{$this->action}" enctype="multipart/form-data">
+  <form class="{$this->name}" name="{$this->name}" id="{$this->name}" method="{$this->method}" action="{$this->action}" enctype="multipart/form-data">
 QUOTE;
-    // This prevents the enter key from accidentally submitting the form
-    // The 'first' submit button in the form is triggered by the enter key
-    // We could have this key trampoline to the key we _do_ want to be the default
-    // http://stackoverflow.com/questions/1963245/multiple-submit-buttons-specifying-default-button
-    $html .=
-<<<QUOTE
-
-      <input type="submit" style="position: absolute; left: -100%;" onclick="return false" >
-QUOTE;
+    $html .= $this->DefaultSubmitButton();
     $html .= $this->HTMLFormTable();
     $html .=
 <<<QUOTE
@@ -725,11 +737,11 @@ class DatabaseForm extends Form {
   
   function DatabaseForm($database, $table, $options=null) {
     // default options
-    $defaultoptions = array('name' => null, 'action' => "", 'method' => "post", 'usedivs' => false, 'idname' => NULL, 'createdname' => NULL, 'modifiedname' => NULL);
-    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions; 
-    parent::Form($options['name'], $options['action'], $options['method'], $options['usedivs']);
     $this->database = $database;
     $this->table = $table;
+    $defaultoptions = array('name' => $table, 'action' => "", 'method' => "post", 'usedivs' => false, 'idname' => NULL, 'createdname' => NULL, 'modifiedname' => NULL);
+    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions; 
+    parent::Form($options['name'], $options['action'], $options['method'], $options['usedivs']);
     $this->idname = $options['idname'];
     $this->createdname = $options['createdname'];
     $this->modifiedname = $options['modifiedname'];
@@ -2304,8 +2316,8 @@ QUOTE;
       $element .=
 <<<QUOTE
 
-        <label for="{$this->id}">
-          <input name="{$this->input}" type="{$this->type}" class="{$this->type}" value="{$key}"{$selected}{$additional}>
+        <label for="{$this->id}_{$key}">
+          <input name="{$this->input}" id="{$this->id}_{$key}" type="{$this->type}" class="{$this->type}" value="{$key}"{$selected}{$additional}>
           <span>{$desc}</span>
         </label>
 QUOTE;
@@ -2543,8 +2555,8 @@ QUOTE;
       $element .=
 <<<QUOTE
 
-        <label for="{$this->id}">
-          <input name="{$this->input}[]" type="checkbox" class="checkbox" value="{$key}"{$selected}>
+        <label for="{$this->id}_{$key}">
+          <input name="{$this->input}[]" id="{$this->id}_{$key}" type="checkbox" class="checkbox" value="{$key}"{$selected}>
           <span>{$desc}</span>
         </label>
 QUOTE;

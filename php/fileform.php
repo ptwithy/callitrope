@@ -61,7 +61,7 @@ class FileFormField extends PatternFormField {
       ,'directory' => 'files'
       ,'maxsize' => 8388608
     );
-    $options = $options ? array_merge($defaultoptions, $options) : $options;
+    $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
     parent::PatternFormField($name, $description, $optional, $options);
     $this->directory = $options['directory'];
     $this->maxsize = $options['maxsize'];
@@ -292,7 +292,7 @@ class ImageFormField extends FileFormField {
       ,'height' => NULL
       ,'crop' => NULL
     );
-    $options = $options ? array_merge($defaultoptions, $options) : $options;
+    $options = ($options ? array_merge($defaultoptions, $options) : $defaultoptions);
     parent::FileFormField($name, $description, $optional, $options);
     $this->store = $options['store'];
     $this->width = $options['width'];
@@ -321,69 +321,115 @@ class ImageFormField extends FileFormField {
       $info = $this->info;
       // get all the attributes we would normally give the input field
       $additional = $this->additionalInputAttributes();
-      // We have an invisible form element that will repost the value (filename)
-      // Then a file button that is transparent and overlays the image
-      // so the user can click to replace the image
-      // then the image itself
-      //
       // See http://www.quirksmode.org/dom/inputfile.html
+      // As modified by ptw:
+      // Depending on whether we are cropping or not, we overlay the image
+      // with a transparent file input button that auto-submits, or create 
+      // an off screen file input
+      // We use a label for that button around a normal button to trigger the
+      // file input and still auto-submit without IE setting off an alarm
+      // Finally we have to kludge around IE only passing clicks to labels that
+      // contain text, not images...
       $cropping = $this->crop && $this->contentAccess() == 'file';
+      $form = $this->form;
+      $formname = $form->name;
       $element = "";
       if (! $cropping) {
+        $width = $info['width'];
+        $widthx2 = $width * 2;
         $element .= <<<QUOTE
 
-          <div style="
-            position: relative;
-          ">
-            <!-- Invisible file button ovelays the image -->
-            <input
-              name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$this->value}"
-              onmouseover="{this.title = 'click to edit'; this.style.cursor = 'pointer'}"
-              onchange="document.forms[0].submit()"
-              style="
-                position: relative;
-                text-align: right;
-                -moz-opacity:0 ;
-                filter:alpha(opacity: 0);
-                opacity: 0;
-                z-index: 2;
-                width: {$info['width']}px; height: {$info['height']}px;
-              "
-            />
-            <div
-              style="
-                position: absolute;
-                top: 0px;
-                left: 0px;
-                z-index: 1;
-              "
-            >
+          <div style="position: relative; overflow: hidden;">
+            <div style="position: relative; z-index: 1;">
 QUOTE;
       }
       $element .= $this->HTMLValue();
       if (! $cropping) {
         $element .= <<<QUOTE
-              </div>
+
             </div>
-          <!-- styleable replace button -->
-          <input type="button" id="{$this->id}_replace" name="{$this->id}_replace"value="Replace Image" onclick="document.getElementById('{$this->id}').click()" />
+            <!-- Invisible file button ovelays the image -->
+            <!-- text-align and font-size are to push the text box out of the frame -->
+            <input
+              name="{$this->input}" id="{$this->id}_input" type="{$this->type}"{$additional} value="{$this->value}"
+              onmouseover="{this.title = 'click to edit'; this.style.cursor = 'pointer'}"
+              onchange="document.getElementById('${formname}').submit()"
+              style="
+                position: absolute;
+                top: 0px;
+                left: 0px;
+                margin: 0;
+                border: none;
+                padding: 0;
+                text-align: left;
+                -moz-opacity:0 ;
+                filter:alpha(opacity: 0);
+                opacity: 0;
+                z-index: 2;
+                font-size: {$info['height']}px;
+                width: {$info['width']}px; height: {$info['height']}px;
+              "
+            />
+          </div>
+          <div class="buttons">
 QUOTE;
       }
       if ($cropping) {
         $element .= <<<QUOTE
 
-          <!-- Cropping inputs -->
-          <input type="hidden" id="{$this->id}_x" name="{$this->id}_x" />
-          <input type="hidden" id="{$this->id}_y" name="{$this->id}_y" />
-          <input type="hidden" id="{$this->id}_w" name="{$this->id}_w" />
-          <input type="hidden" id="{$this->id}_h" name="{$this->id}_h" />
-          <input type="submit" id="{$this->id}_crop" name="{$this->id}_crop" value="Crop Image" />
-          <!-- styleable replace button -->
-          <input type="button" id="{$this->id}_replace" name="{$this->id}_replace"value="Replace Image" onclick="document.getElementById('{$this->id}').click()" />
-          <!-- actual image upload button, not displayed because it is not styleable -->
-          <input name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$this->value}" onchange="document.forms[0].submit()" style="visibility: hidden;" />
+            <!-- Cropping inputs -->
+            <input type="hidden" id="{$this->id}_x" name="{$this->id}_x" />
+            <input type="hidden" id="{$this->id}_y" name="{$this->id}_y" />
+            <input type="hidden" id="{$this->id}_w" name="{$this->id}_w" />
+            <input type="hidden" id="{$this->id}_h" name="{$this->id}_h" />
+            <input type="submit" id="{$this->id}_crop" name="{$this->id}_crop" value="Crop Image" />
+            <!-- Off-screen input for when cropping is in play, but we still might want a new image -->
+            <input
+              name="{$this->input}" id="{$this->id}_input" type="{$this->type}"{$additional} value="{$this->value}"
+              onchange="document.getElementById('${formname}').submit()"
+              style="position: absolute; left: -9999px;"
+            />
 QUOTE;
       }
+      $element .= <<<QUOTE
+
+            <!-- styleable replace button -->
+            <!-- using label to intecept click and send it to the file input element -->
+            <!-- so we don't trigger security alerts on IE -->
+            <label for="{$this->id}_input" id="{$this->id}_label">
+              <!-- IE will only let you click on text in a label, not an image -->
+              <!--[if IE]>
+              <div style="position: relative; overflow: hidden;">
+                <div style="position: relative; z-index: 1;">
+                  <input type="button" id="{$this->id}_replace" name="{$this->id}_replace" value="Replace Image" />
+                </div>
+                <div
+                    style="
+                      position: absolute;
+                      top: 0px;
+                      left: 0px;
+                      margin: 0;
+                      border: none;
+                      padding: 0;
+                      -moz-opacity:0 ;
+                      filter:alpha(opacity: 0);
+                      opacity: 0;
+                      z-index: 2;
+                      font-size: 50px;
+                      cursor: default;
+                    "
+                  >
+                  Replace Image
+                </div>
+              </div>
+              <![endif]-->
+              <!--[if !IE]> -->
+                <!-- This button is for "display only", so it looks like all other buttons -->
+                <input type="button" id="{$this->id}_replace" name="{$this->id}_replace" value="Replace Image" />
+              <!-- <![endif]-->
+            </label>
+          </div>
+QUOTE;
       return $element;
     }
     // If there is no image yet, just 
@@ -468,10 +514,7 @@ QUOTE;
     if ($h && (!$w)) { $w = $h * $source_aspect; }
     $dest_aspect = $w / $h;
 
-    if ($width < $w && $height < $h) {
-      $newwidth = $width;
-      $newheight = $height;
-    } else if ($dest_aspect > $source_aspect) {
+    if ($dest_aspect > $source_aspect) {
       $newwidth = $h * $source_aspect;
       $newheight = $h;
     } else {
@@ -566,10 +609,11 @@ QUOTE;
 ';  
   
   function head() {
-    parent::initialize();
+    parent::head();
     if ($this->crop && $this->contentAccess() == 'file') {
       echo self::$onetime;
       self::$onetime = "";
+
       $options = "";
       if (is_array($this->crop)) {
         foreach ($this->crop as $key => $value) {
@@ -579,14 +623,11 @@ QUOTE;
       echo <<<QUOTE
       
         <script type="text/javascript">
-
           \$(function(){
-
             \$('#{$this->id}_img').Jcrop({
               {$options}
               onSelect: {$this->id}_updateCoords
             });
-
           });
 
           function {$this->id}_updateCoords(c)
