@@ -691,25 +691,32 @@ QUOTE;
     $errors = array();
     // See "PHP sucks" above
     $fields = array_filter($this->fields, 'is_field');
-    // Here, PHP double sucks.  Why would this function not just return
-    // the f-ing sorted array?!?!?
-    usort($fields, 'order');
-    $current = $fields[0]->priority;
+    // There is no PHP stable sort (apparently), so we do this the hard way
+    $priorities = array();
     foreach ($fields as $field) {
-      // Stop if there are errors and you hit a new priority level
-      if ((! $ok) && ($field->priority != $current)) { break; }
-      $current = $field->priority;
-      // This allows you to have a dynamic form -- we won't check
-      // fields that didn't get posted.
-      if ($field->isPresent($source)) {
-        if ($field->parseValue($source)) {
-          // All good
-        } else {
-          // Bzzt!
-          $ok = false;
-          array_push($errors, $field->errorMessage());
+      $pri = $field->priority;
+      $queue = array_key_exists($pri, $priorities) ? $priorities[$pri] : array();
+      $queue[] = $field;
+      // There is something magical going on here with PHP, if I don't put the
+      // modified array back, I never see it.  Whacky!
+      $priorities[$pri] = $queue;
+    }
+    foreach ($priorities as $queue) {
+      foreach ($queue as $field) {
+        // This allows you to have a dynamic form -- we won't check
+        // fields that didn't get posted.
+        if ($field->isPresent($source)) {
+          if ($field->parseValue($source)) {
+            // All good
+          } else {
+            // Bzzt!
+            $ok = false;
+            $errors[] = $field->errorMessage();
+          }
         }
       }
+      // Stop if there are errors and you are about to go to the next priority level
+      if (! $ok) { break; }
     }
     if ($validate) {
       $this->validate = true;
@@ -1148,7 +1155,11 @@ class FormField {
 
   // Tests if a value is valid for this field
   function isvalid($value) {
-    return (! $this->required) || (isset($value) && ($value !== ''));
+    if ((! $this->required) && empty($value)) {
+      return true;
+    } else {
+      return (isset($value) && ($value !== ''));
+    }
   }
 
   function hasvalue() {
@@ -1165,7 +1176,7 @@ class FormField {
     if ($this->required) {
       return $this->description . " is a required field. Please enter it below.";
     } else {
-      return $this->description . ': "' . $this->HTMLValue() . '" is not a valid entry.';
+      return $this->description . ': "' . $this->ErrorValue() . '" is not a valid entry.';
     }
   }
 
@@ -1233,6 +1244,11 @@ class FormField {
   // have a valid value, test $this->valid first.
   function HTMLValue() {
     return htmlspecialchars($this->choice(), ENT_QUOTES);
+  }
+
+  // Ditto for in an error message
+  function ErrorValue() {
+    return $this->HTMLValue();
   }
 
   // Returns the value in a format that is safe to insert into SQL.
@@ -1542,7 +1558,7 @@ class SimpleNumberFormField extends FormField {
     if (empty($this->value) && $this->required) {
       return $this->description . " is a required field. Please enter it below.";
     }
-    return $this->description . ': "' . $this->HTMLValue() . '" is not a valid '
+    return $this->description . ': "' . $this->ErrorValue() . '" is not a valid '
       . $this->title
       . '. Please enter a valid ' . $this->title
       . ($this->placeholder ? (' (' . $this->placeholder . ')') : '')    . '.';
@@ -1633,7 +1649,7 @@ abstract class PatternFormField extends FormField {
     if (empty($this->value) && $this->required) {
       return $this->description . " is a required field. Please enter it below.";
     }
-    return $this->description . ': "' . $this->HTMLValue() . '" is not a valid '
+    return $this->description . ': "' . $this->ErrorValue() . '" is not a valid '
       . $this->title
       . '. Please enter a valid ' . $this->title
       . ($this->placeholder ? (' (' . $this->placeholder . ')') : '')    . '.';
@@ -2722,11 +2738,12 @@ class SimpleTimeFormField extends SimpleMenuFormField {
     $end = $options['end'];
     $interval = $options['interval'];
     for ($i = $start; $i <= $end; $i += $interval) {
-      $hour = floor($i);
+      $isohour = $hour = floor($i);
       $minute = floor(($i - $hour) * 60);
       $m = ($hour < 12 ? "am" : "pm");
       if ($hour > 12) { $hour -= 12; }
-      $choices[] = $hour . ":" . ($minute < 10 ? "0" : "") . $minute . $m;
+      $key = ($isohour < 10 ? "0" : "") . $isohour . ":" . ($minute < 10 ? "0" : "") . $minute . ":00";
+      $choices[$key] = $hour . ":" . ($minute < 10 ? "0" : "") . $minute . $m;;
     }
     // default options
     $defaultoptions = array(

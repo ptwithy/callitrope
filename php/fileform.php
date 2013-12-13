@@ -323,6 +323,8 @@ class ImageFormField extends FileFormField {
     $additional = $this->additionalInputAttributes();
     $form = $this->form;
     $formname = $form->name;
+    // Higlight incorrect values
+    $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
     if ($valid) {
       $info = $this->info;
       // See http://www.quirksmode.org/dom/inputfile.html
@@ -334,7 +336,12 @@ class ImageFormField extends FileFormField {
         $element .= <<<QUOTE
 
           <div style="position: relative; overflow: hidden;">
-            <div style="position: relative; z-index: 1;">
+            <div{$class} style="position: relative; z-index: 1;">
+QUOTE;
+      } else {
+        $element .= <<<QUOTE
+
+            <div{$class}>
 QUOTE;
       }
       // Here is the image
@@ -366,6 +373,11 @@ QUOTE;
               "
             />
           </div>
+QUOTE;
+      } else {
+        $element .= <<<QUOTE
+
+            </div>
 QUOTE;
       }
     } // End valid
@@ -455,15 +467,9 @@ QUOTE;
       }
       return false;
     }
-//     if ($this->crop && ($this->width != $width || $this->height != $height)) {
-//       $this->error = "Image must be cropped first.";
-//       if ($debugging > 1) {
-//         $this->error .= " [{$width} != {$this->width} || {$height} != {$this->height}]";
-//       }
-//       return false;
-//     }
     return true;
   }
+  
   function contentAccess() {
     global $debugging;
     $access = parent::contentAccess();
@@ -505,6 +511,10 @@ QUOTE;
       default:  trigger_error('Unsupported filetype!', E_USER_WARNING);  break;
     }
     unlink($tempfile);
+    if ($src === false) {
+      $this->error = "Image corrupted";
+      return false;
+    }
     $x = 0;
     $y = 0;
     if (is_array($crop)) {
@@ -534,8 +544,12 @@ QUOTE;
       $newheight = $w / $source_aspect;
     }
     $dst = imagecreatetruecolor($newwidth, $newheight);
-    imagecopyresampled($dst, $src, 0, 0, $x, $y, $newwidth, $newheight, $width, $height);
+    $copied = imagecopyresampled($dst, $src, 0, 0, $x, $y, $newwidth, $newheight, $width, $height);
     imagedestroy($src);
+    if ($copied === false) {
+      $this->error = "Resize failed";
+      return false;
+    }
     // We always resize to png
     $result = imagepng($dst, $filepath);
     imagedestroy($dst);
@@ -543,16 +557,31 @@ QUOTE;
   }
   
   function setImage($string) {
+    global $debugging;
     // delete any previous
     $this->clearImage();
-    $_SESSION[$this->id] = $this->img = $string;
     // Get info about image -- wish we had `getimagesizefromstring` not available until PHP 5.2
     $img = imagecreatefromstring($string);
+    if ($img === false) {
+      $this->error = "Image corrupted";
+      return false;
+    }
+    $width = imagesx($img);
+    $height = imagesy($img);
     $this->info = array(
-      'width' => imagesx($img)
-      ,'height' => imagesy($img));
+      'width' => $width
+      ,'height' => $height);
+    if ($this->crop && ((isset($this->width) && $width > $this->width) || (isset($this->height) && $height > $this->height))) {
+      $this->error = "Image must be cropped first.";
+      if ($debugging > 1) {
+        $this->error .= " [{$width} > {$this->width} || {$height} >{$this->height}]";
+      }
+      return false;
+    }
+    $_SESSION[$this->id] = $this->img = $string;
     $this->path = $this->filepath($this->value);
     imagedestroy($img);
+    return true;
   }
   
   function clearImage() {
@@ -584,32 +613,32 @@ QUOTE;
         $crop['y'] = $source[$this->id . '_y'];
         $crop['h'] = $source[$this->id . '_h'];
         $crop['w'] = $source[$this->id . '_w'];
-        $this->moveFileWithResize($filepath, $filepath, $this->width, $this->height, $crop);
+        $valid = $this->moveFileWithResize($filepath, $filepath, $this->width, $this->height, $crop);
       }
-      $this->setImage(file_get_contents($filepath));
-      return $this->valid = $valid;
-    }
-    if ($debugging > 2) {
-      echo "<pre>source: "; print_r($source); echo "</pre>";
-    }
-    if ($debugging > 1) {
-      echo "<pre>uploading: " . ($this->uploading($source) ? 'true' : 'false') . "</pre>";
-      echo "<pre>array_key_exists(\$input, \$source): ". (array_key_exists($input, $source) ? 'true' : 'false') . "</pre>";
-      echo "<pre>isset(\$this->id, \$_SESSION): ". (isset($this->id, $_SESSION) ? 'true' : 'false') . "</pre>";
-    }
-    if (($this->contentAccess() == 'sql') && (! $this->uploading($source))) {
-      if (($source != $_POST) && isset($source[$input])) {
-        $this->value = 'sql';
-        $this->setImage($source[$input]);
-        return $this->valid = true;
+      // Check again in case we cropped
+      if ($valid) {
+        $valid = $this->setImage(file_get_contents($filepath));
       }
-      if (isset($_SESSION[$this->id])) {
-        $this->value = 'sql';
-        $this->setImage($_SESSION[$this->id]);
-        return $this->valid = true;
+    } else {
+      if ($debugging > 2) {
+        echo "<pre>source: "; print_r($source); echo "</pre>";
+      }
+      if ($debugging > 1) {
+        echo "<pre>uploading: " . ($this->uploading($source) ? 'true' : 'false') . "</pre>";
+        echo "<pre>array_key_exists(\$input, \$source): ". (array_key_exists($input, $source) ? 'true' : 'false') . "</pre>";
+        echo "<pre>isset(\$this->id, \$_SESSION): ". (isset($this->id, $_SESSION) ? 'true' : 'false') . "</pre>";
+      }
+      if (($this->contentAccess() == 'sql') && (! $this->uploading($source))) {
+        if (($source != $_POST) && isset($source[$input])) {
+          $this->value = 'sql';
+          $valid = $this->setImage($source[$input]);
+        } else if (isset($_SESSION[$this->id])) {
+          $this->value = 'sql';
+          $valid = $this->setImage($_SESSION[$this->id]);
+        }
       }
     }
-    return $this->valid = $valid || (! $this->required);
+    return $this->valid = $valid || ((! $this->required) && empty($this->value));
   }
 
   static $onetime = '
@@ -664,6 +693,11 @@ QUOTE;
     return "LONGBLOB";
   }
 
+  function ErrorValue() {
+    // Maybe use a thumbnail?
+    return parent::HTMLValue();
+  }
+
   function HTMLValue() {
     // Can't use $this->valid as the form starts out valid
     $value = parent::HTMLValue();
@@ -684,7 +718,7 @@ QUOTE;
   }
   
   function SQLValue() {
-    if ($this->hasvalue()) {
+    if ($this->hasvalue() && isset($this->img)) {
       // Really must use prepared statement!
       return "'" . addslashes($this->img) . "'";
     } else {
