@@ -264,8 +264,13 @@ class Form {
 
   var $fieldOrder;
   // Sets the order of the fields in the form
-  function setFieldOrder($ordering) {
-    $this->fieldOrder = $ordering;
+  // If no ordering is passed, uses the database ordering
+  function setFieldOrder($ordering=NULL) {
+    if (is_array($this->fieldOrder)) {
+      $this->fieldOrder = $ordering;
+    } else {
+      $this->fieldOrder = $this->columns;
+    }
   }
 
   // These allow a form to have multiple sections.  Each section is
@@ -311,9 +316,6 @@ class Form {
     }
     // Put the fields in their proper order
     // Default ordering to table order
-    if (! is_array($this->fieldOrder)) {
-      $this->fieldOrder = $this->columns;
-    }
     if (is_array($this->fieldOrder)) {
       $ordering = $this->fieldOrder;
       $newfields = array();
@@ -849,9 +851,11 @@ class DatabaseForm extends Form {
         $this->finalize();
         $id = $this->recordID;
         if ($options['onCancel']) {
+          header( "HTTP/1.1 303 See Other" );
           header($options['onCancel']);
         } else {
           // Now fetch the record you just inserted, so you can edit it
+          header( "HTTP/1.1 303 See Other" );
           header("Location: {$this->action}?{$idname}=" . urlencode($id));
         }
         exit;
@@ -863,10 +867,12 @@ class DatabaseForm extends Form {
           $id = $this->SQLInsert();
           if ($id != NULL) {
             if ($options['onSubmit']) {
+              header( "HTTP/1.1 303 See Other" );
               header($options['onSubmit']);
               exit;
             } else if ($editable) {
               // Now fetch the record you just inserted, so you can edit it
+              header( "HTTP/1.1 303 See Other" );
               header("Location: {$this->action}?{$idname}=" . urlencode($id));
               exit;
             }
@@ -877,12 +883,14 @@ class DatabaseForm extends Form {
           $deleted = $this->SQLDelete(); 
           if ($deleted != NULL) {
             if ($options['onDelete']) {
+              header( "HTTP/1.1 303 See Other" );
               header($options['onDelete']);
               exit;
             }
             // Go back to an empty form
             $parts = explode('?', $this->action, 1);
             $url = $parts[0]; //  http_build_url($this->action, "", HTTP_URL_STRIP_QUERY | HTTP_URL_STRIP_FRAGMENT);
+            header( "HTTP/1.1 303 See Other" );
             header("Location: {$url}");
             exit;
           }        
@@ -891,10 +899,12 @@ class DatabaseForm extends Form {
           $id = $this->SQLUpdate();
           if ($id != NULL) {
             if ($options['onUpdate']) {
+              header( "HTTP/1.1 303 See Other" );
               header($options['onUpdate']);
               exit;
             }
             // Now fetch the record you just updated, so you can edit it
+            header( "HTTP/1.1 303 See Other" );
             header("Location: {$this->action}?{$idname}=" . urlencode($id));
             exit;
           }        

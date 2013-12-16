@@ -77,9 +77,10 @@ class FileFormField extends PatternFormField {
 QUOTE;
     // For unknown reasons, the MAX_FILE_SIZE input has to come first
     $element .= parent::HTMLTableColumn();
+    $form = $this->form;
     // File forms can be inscrutible if they are autosubmitted (e.g., images)
-    if ($this->autosubmit && (! empty($this->value)) && (! $this->isvalid($this->value))) {
-      $msg = "'{$this->HTMLValue()}' is not a valid {$this->title}";
+    if ($this->autosubmit && (! $form->validate) && $this->error) {
+      $msg = "'{$this->ErrorValue()}' is not a valid {$this->title}";
       if ($this->error) {
         $msg .= " ({$this->error})";
       }
@@ -187,7 +188,7 @@ QUOTE;
   function parseValue($source) {
     global $debugging;
     $filename = '';
-    $valid = false;
+    $valid = true;
     $input = $this->input;
     $uploading = $this->uploading($source);
     if ($uploading) {
@@ -195,7 +196,7 @@ QUOTE;
     } else if (array_key_exists($input, $source)) {
       $filename = $source[$input];
     }
-    if ((! empty($filename)) && $this->isvalid($filename)) {
+    // if ((! empty($filename)) && $this->isvalid($filename)) {
       $filename = $this->canonical($filename);
       $filepath = $this->filepath($filename);
       if ($uploading) {
@@ -203,27 +204,49 @@ QUOTE;
         $size = $_FILES[$input]['size'];
         switch (true) {
           case ($_FILES[$input]["error"] != 'UPLOAD_ERROR_OK'):
+            $valid = false;
             $this->error = "Error uploading";
-            if ($debugging > 1) {
-              $this->error .= " [" . $_FILES[$input]["error"] . "]";
+            switch ($_FILES[$input]["error"]) { 
+              case UPLOAD_ERR_INI_SIZE: 
+              case UPLOAD_ERR_FORM_SIZE: 
+                  $message = "File too big"; 
+                  break; 
+              case UPLOAD_ERR_PARTIAL: 
+              case UPLOAD_ERR_NO_FILE: 
+                  $message = "File upload failed"; 
+                  break; 
+              case UPLOAD_ERR_NO_TMP_DIR: 
+              case UPLOAD_ERR_CANT_WRITE: 
+                  $message = "Internal error";
+              case UPLOAD_ERR_EXTENSION: 
+                  $message = "Bad file type"; 
+                  break; 
+              default: 
+                  $message = "Unknown upload error"; 
+                  break; 
             }
+            $this->error .= " [{$message}]";
             break;
           case (! is_uploaded_file($tempname)):
+            $valid = false;
             $this->error = "Invalid file";
             if ($debugging > 1) {
               $this->error .= " [{$tempname}]";
             }
             break;
           case (! $this->validType($tempname)):
+            $valid = false;
             // validType sets error
             break;
           case ($size < 0 || $size > $this->maxsize):
+            $valid = false;
             $this->error = "File must be less than {$this->maxsize} bytes";
             if ($debugging > 1) {
               $this->error .= " [{$size}]";
             }
             break;
           case (!is_writable($this->dirpath())):
+            $valid = false;
             $this->error = "Directory inaccessible";
             if ($debugging > 1) {
               $this->error .= " [" . $this->dirpath() . "]";
@@ -231,6 +254,7 @@ QUOTE;
             break;
           // Try to move it
           case (! $this->moveFile($tempname, $filepath)):
+            $valid = false;
             $this->error = "Error moving";
             if ($debugging > 1) {
               $this->error .= " [{$tempname} => {$filepath}]";
@@ -242,10 +266,7 @@ QUOTE;
             break;
         }
       }
-    }
-    if ($this->isvalid($filename)) {
-      $valid = true;
-    }
+    // }
     $this->value = $filename;
     $this->valid = $valid;
     return $valid;
@@ -318,7 +339,7 @@ class ImageFormField extends FileFormField {
       echo "<pre>valid: {$valid}; value: {$this->value}; path: {$this->path}</pre>";
     }
     $element = "";
-    $cropping = $this->crop && $this->contentAccess() == 'file';
+    $cropping = $this->crop && $this->contentAccess() == 'file' && $this->uncropped();
     // get all the attributes we would normally give the input field
     $additional = $this->additionalInputAttributes();
     $form = $this->form;
@@ -417,9 +438,8 @@ QUOTE;
           <!-- styleable replace/choose button -->
           <!-- using label to intecept click and send it to the file input element -->
           <!-- so we don't trigger security alerts on IE -->
+          <!-- also required for Chrome, so we just use this hack for everyone -->
           <label for="{$this->id}" id="{$this->id}_label">
-            <!-- IE will only let you click on text in a label, not an image -->
-            <!--[if IE]>
             <div style="position: relative; overflow: hidden;">
               <div style="position: relative; z-index: 1;">
                 <input type="button" id="{$this->id}_button" value="{$label}" />
@@ -443,11 +463,6 @@ QUOTE;
                 {$label}
               </div>
             </div>
-            <![endif]-->
-            <!--[if !IE]> -->
-              <!-- This button is for "display only", so it looks like all other buttons -->
-              <input type="button" id="{$this->id}_button" value="{$label}" />
-            <!-- <![endif]-->
           </label>
         </div>
 QUOTE;
@@ -556,6 +571,12 @@ QUOTE;
     return $result;
   }
   
+  function uncropped() {
+    $width = $this->info['width'];
+    $height = $this->info['height'];
+    return ((isset($this->width) && $width > $this->width) || (isset($this->height) && $height > $this->height));
+  }
+  
   function setImage($string) {
     global $debugging;
     // delete any previous
@@ -571,7 +592,7 @@ QUOTE;
     $this->info = array(
       'width' => $width
       ,'height' => $height);
-    if ($this->crop && ((isset($this->width) && $width > $this->width) || (isset($this->height) && $height > $this->height))) {
+    if ($this->crop && $this->uncropped()) {
       $this->error = "Image must be cropped first.";
       if ($debugging > 1) {
         $this->error .= " [{$width} > {$this->width} || {$height} >{$this->height}]";
@@ -710,7 +731,9 @@ QUOTE;
         case 'file':
         default:
           $webpath = $this->webpath($this->value);
-          $value = "<img id='{$this->id}_img' src='{$webpath}' />";
+          // Need explicit width because Firefox seems to cache the width based on the path!
+          list($width, $height, $image_type) = getimagesize($this->filepath($this->value));
+          $value = "<img id='{$this->id}_img' src='{$webpath}' width='${width}' height='{$height}'>";
           break;
       }
     }
