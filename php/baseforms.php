@@ -1845,6 +1845,11 @@ class PostalCodeFormField extends FormField {
 // A FormField that is a phone number
 //
 class PhoneFormField extends PatternFormField {
+  var $usPattern = "/^\(?([0-9]{3,3})\)?[-. ]?([0-9]{3,3})[-. ]?([0-9]{4,4})$/";
+  var $usPlaceholder = "555-555-1234";
+  var $internationalPattern = "/^\+\(?(9[976]\\d|8[987530]\\d|6[987]\\d|5[90]\\d|42\\d|3[875]\\d|2[98654321]\\d|9[8543210]|8[6421]|6[6543210]|5[87654321]|4[987654310]|3[9643210]|2[70]|7|1)\)?\\s*((?:[\\s#*.,-]?\\d){1,14})$/";
+  var $internationalPlaceholder = "+1 123 456 7890";
+  var $isInternational = false;
 
   function PhoneFormField ($name, $description, $optional=false, $options=NULL) {
     global $html5;
@@ -1854,29 +1859,66 @@ class PhoneFormField extends PatternFormField {
       // [2012-12-12 ptw] Mobile Webkit inserts commas if you use 'number'
       ,'type' => $html5 ? "tel" : "text"
       ,'maxlength' => 16
-      ,'pattern' => "/^\(?([0-9]{3,3})\)?[-. ]?([0-9]{3,3})[-. ]?([0-9]{4,4})$/"
+      ,'pattern' => $this->usPattern
       ,'title' => "phone number"
-      ,'placeholder' => "555-555-1234"
+      ,'placeholder' => $this->usPlaceholder
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
     parent::PatternFormField($name, $description, $optional, $options);
   }
-
+  
   function isvalid ($value) {
     if ((! $this->required) && empty($value)) {
       return true;
     } else {
-      return parent::isvalid($value);
+      if (preg_match($this->usPattern, $value)) {
+        $this->isInternational = false;
+        return true;
+      } else if (preg_match($this->internationalPattern, $value)) {
+        $this->isInternational = true;
+        return true;
+      }      
     }
+    return false;
+  }
+  
+  function canonical ($value) {
+    $value = parent::canonical($value);
+    $matches = array();
+    if (preg_match($this->usPattern, $value, $matches)) {
+      return $matches[1] . "-" . $matches[2] . "-" . $matches[3];
+    } else if (preg_match($this->internationalPattern, $value, $matches)) {
+      return '+' . $matches[1] . ' ' . preg_replace("/[.,-]/", " ", $matches[2]);
+    }
+    return NULL;
+  }
+}
+
+///
+// An international phone number
+// Use this to _require_ a +country-code prefix
+//
+class InternationalPhoneFormField extends PhoneFormField {
+
+  function InternationalPhoneFormField($name, $description, $optional=false, $options=NULL) {
+    global $html5;
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'pattern' => $this->internationalPattern
+      ,'placeholder' => $this->internationalPlaceholder
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::PhoneFormField($name, $description, $optional, $options);
   }
 
   function canonical ($value) {
     $value = parent::canonical($value);
-    $matches = array();
-    if (preg_match($this->pattern, $value, $matches)) {
-      return $matches[1] . "-" . $matches[2] . "-" . $matches[3];
+    if ($this->isInternational) {
+      return $value;
+    } else {
+      return parent::canonical("+1 {$value}");
     }
-    return NULL;
   }
 }
 
