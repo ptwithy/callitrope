@@ -58,70 +58,22 @@ $mobile = preg_match("/ipad|iphone|android/i",  $_SERVER['HTTP_USER_AGENT']);
 function is_field ($f) { return $f instanceof FormField; };
 function order ($a, $b) { return $a->priority - $b->priority; };
 
-function fieldInternal($name, $description=null, $type=null, $optional=false, $options=NULL) {
-  $namemap = array("email", "number", "choice", "state", "zip", "postal", "country", "phone", "cell", "birth", "date", "daytime", "time", "file", "image", "picture");
-  if ($type == null) {
-    foreach ($namemap as $n) {
-      if (stristr($name, $n)) {
-        $type = $n;
-        break;
-      }
-    }
-  }
-
-  switch ($type) {
-    case "email":
-      return new EmailFormField($name, $description, $optional, $options);
-    case "number":
-      return new SimpleNumberFormField($name, $description, $optional, $options);
-    case "state":
-      return new StateFormField($name, $description, $optional, $options);
-    case "zip":
-      return new ZipFormField($name, $description, $optional, $options);
-    case "postal":
-      return new PostalCodeFormField($name, $description, $optional, $options);
-    case "country":
-      return new CountryFormField($name, $description, $optional, $options);
-    case "phone":
-    case "cell":
-      return new PhoneFormField($name, $description, $optional, $options);
-    case "date":
-      return new DateFormField($name, $description, $optional, $options);
-    case "birth":
-    case "birthdate":
-      return new BirthdateFormField($name, $description, $optional, $options);
-    case "daytime":
-    case "time":
-      if (array_key_exists('start', $options)) {
-        return new SimpleTimeFormField($name, $description, $optional, $options);
-      } else {
-        return new DaytimeFormField($name, $description, $optional, $options);
-      }
-    case "text":
-    case "area":
-    case "textarea":
-      return new TextAreaFormField($name, $description, $optional, $options);
-    case "button":
-    case "radio":
-    case "radiobutton":
-    case "choice":
-    case "single":
-      return new SimpleRadioFormField($name, $description, $optional, $options);
-    case "check":
-    case "checkbox":
-    case "multiple":
-      return new SimpleCheckboxFormField($name, $description, $optional, $options);
-    case "menu":
-      return new SimpleMenuFormField($name, $description, $optional, $options);
-
-    case "file":
-      return new FileFormField($name, $description, $optional, $options);
-    case "image":
-    case "picture":
-      return new ImageFormField($name, $description, $optional, $options);
-
-    default:
-      return new FormField($name, $description, $optional, $options);
+class FieldSpec {
+  var $id;
+  var $name;
+  var $description;
+  var $type;
+  var $optional;
+  var $options;
+  
+  function FieldSpec($name, $description, $type, $optional, $options) {
+    $this->name = $name;
+    $instance = isset($options['instance']) ? $options['instance'] : '';
+    $this->id = "{$name}{$instance}";
+    $this->description = $description;
+    $this->type = $type;
+    $this->optional = $optional;
+    $this->options = $options;
   }
 }
 
@@ -132,13 +84,13 @@ function fieldInternal($name, $description=null, $type=null, $optional=false, $o
 // $type - type of the field, can be inferred from some obvious names
 // $description - defaults to name with underscores removed and capitalized
 function field($name, $description=null, $type=null, $options=null) {
-  return fieldInternal($name, $description, $type, false, $options);
+  return new FieldSpec($name, $description, $type, false, $options);
 }
 ///
 // Create an optional field
 //
 function optField($name, $description=null, $type=null, $options=null) {
-  return fieldInternal($name, $description, $type, true, $options);
+  return new FieldSpec($name, $description, $type, true, $options);
 }
 
   
@@ -195,12 +147,122 @@ class Form {
     ,'int' => 'number'
     ,'decimal' => 'number'
     ,'datetime' => 'datetime'
-    ,'date' => 'date'
+    // SQL date fields should require full year
+    ,'date' => 'birthdate'
     ,'time' => 'time'
     ,'blob' => 'image'
   );
     
-      
+  function fieldInternal($fieldspec) {
+    global $debugging;
+    $id = $fieldspec->id;
+    $name = $fieldspec->name;
+    $description = $fieldspec->description;
+    $type = $fieldspec->type;
+    $optional = $fieldspec->optional;
+    $options = $fieldspec->options;
+    
+    $namemap = array("email", "number", "choice", "state", "region", "zip", "postal", "country", "phone", "cell", "birth", "date", "daytime", "time", "file", "image", "picture");
+    if ($type == null) {
+      foreach ($namemap as $n) {
+        if (stristr($name, $n)) {
+          $type = $n;
+          break;
+        }
+      }
+    }
+    
+    // Compute id from name and instance
+    if ($type == null) {
+      $e = $this->choicesForField($id);
+      if (is_array($e)) {
+        if ($debugging > 2) {
+          echo "<pre>{$id} choices => " . print_r($e) . "<pre>";
+        }
+        if (array_key_exists(0, $e)) {
+          $type = "checkbox";
+        } elseif (in_array("", $e)) {
+          $type = "menu";
+        } else {
+          $type = "radio";
+        }
+      }
+      if ($type === null) {
+        $desc = $this->columns[$id];
+        $sqltype = $desc->Type;
+        foreach ($this->sqlTypeMap as $s => $t) {
+          if (stristr($s, $sqltype)) {
+            $type = $t;
+            break;
+          }
+        }
+      }
+    }
+    
+    switch ($type) {
+      case "email":
+        return new EmailFormField($name, $description, $optional, $options);
+      case "number":
+        return new SimpleNumberFormField($name, $description, $optional, $options);
+      case "state":
+        return new StateFormField($name, $description, $optional, $options);
+      case "region":
+      case "oblast":
+        return new OblastFormField($name, $description, $optional, $options);
+      case "zip":
+      case "zipcode":
+        return new ZipFormField($name, $description, $optional, $options);
+      case "postal":
+      case "postalcode":
+        return new PostalCodeFormField($name, $description, $optional, $options);
+      case "country":
+        return new CountryFormField($name, $description, $optional, $options);
+      case "phone":
+      case "cell":
+        return new PhoneFormField($name, $description, $optional, $options);
+      case "internationalphone":
+        return new InternationalPhoneFormField($name, $description, $optional, $options);
+      case "date":
+        return new DateFormField($name, $description, $optional, $options);
+      case "birth":
+      case "birthdate":
+        return new BirthdateFormField($name, $description, $optional, $options);
+      case "daytime":
+      case "time":
+        if (array_key_exists('start', $options)) {
+          return new SimpleTimeFormField($name, $description, $optional, $options);
+        } else {
+          return new DaytimeFormField($name, $description, $optional, $options);
+        }
+      case "text":
+      case "area":
+      case "textarea":
+        return new TextAreaFormField($name, $description, $optional, $options);
+      case "button":
+      case "radio":
+      case "radiobutton":
+      case "choice":
+      case "single":
+        return new SimpleRadioFormField($name, $description, $optional, $options);
+      case "check":
+      case "checkbox":
+      case "multiple":
+        return new SimpleCheckboxFormField($name, $description, $optional, $options);
+      case "menu":
+        return new SimpleMenuFormField($name, $description, $optional, $options);
+
+      case "file":
+        return new FileFormField($name, $description, $optional, $options);
+      case "image":
+      case "picture":
+        return new ImageFormField($name, $description, $optional, $options);
+
+      default:
+        return new FormField($name, $description, $optional, $options);
+    }
+  }
+
+
   function autoAddFields($include=null, $omit= null) {
     global $debugging;
     $columns = $this->columns;
@@ -218,30 +280,7 @@ class Form {
       if ($debugging > 2) {
         echo "<pre>{$field} => " . print_r($desc) . "<pre>";
       }
-      $type = null;
-      $e = $this->choicesForField($field);
-      if (is_array($e)) {
-        if ($debugging > 2) {
-          echo "<pre>{$field} choices => " . print_r($e) . "<pre>";
-        }
-        if (array_key_exists(0, $e)) {
-          $type = "checkbox";
-        } elseif (in_array("", $e)) {
-          $type = "menu";
-        } else {
-          $type = "radio";
-        }
-      }
-      if ($type === null) {
-        $sqltype = $desc->Type;
-        foreach ($this->sqlTypeMap as $s => $t) {
-          if (stristr($s, $sqltype)) {
-            $type = $t;
-            break;
-          }
-        }
-      }
-      $f = field($field, null, $type);
+      $f = field($field, null);
       if (array_key_exists($f->id, $this->fields)) {
         // Don't add fields that have already been added
       } else if (($f->id == $this->idname) ||
@@ -380,6 +419,10 @@ class Form {
   }
 
   function addField($formField) {
+    // Look for, and instantiate delayed FieldSpec
+    if ($formField instanceof FieldSpec) {
+      $formField = $this->fieldInternal($formField);
+    }
     if ($formField instanceof FormField) {
       $this->fields[$formField->id] = $formField;
       $formField->setForm($this);
@@ -1253,7 +1296,7 @@ class FormField {
   // Can return an invalid value (for error reporting).  If you must
   // have a valid value, test $this->valid first.
   function HTMLValue() {
-    return htmlspecialchars($this->choice(), ENT_QUOTES);
+    return htmlentities($this->choice(), ENT_QUOTES, "UTF-8");
   }
 
   // Ditto for in an error message
@@ -1332,7 +1375,7 @@ QUOTE;
       }
     } else if (isset($this->default)) {
       $val = $this->default;
-      $val = htmlspecialchars($val, ENT_QUOTES);
+      $val = htmlentities($val, ENT_QUOTES, "UTF-8");
       $class = ' class="hint"';
       $onfocus =
 <<<QUOTE
@@ -1349,7 +1392,11 @@ QUOTE;
   }
 
   function HTMLTableColumn() {
-    $element = $this->HTMLFormElement();
+    $classname = get_class($this);
+    $element = <<<QUOTE
+      <!-- {$classname} -->
+QUOTE;
+    $element .= $this->HTMLFormElement();
     if ($this->readonly) {
       // We still need to submit the value
       $element .=
@@ -1685,7 +1732,7 @@ abstract class PatternFormField extends FormField {
 //
 class StateFormField extends PatternFormField {
 
-  function StateFormField ($name, $description, $optional=false, $options) {
+  function StateFormField ($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -1707,6 +1754,25 @@ class StateFormField extends PatternFormField {
     }
     return NULL;
   }
+}
+
+///
+// A FormField for State, Province, or other sub-national political division
+//
+class OblastFormField extends FormField {
+
+  function OblastFormField ($name, $description, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'title' => "State, Province, or Region"
+      ,'placeholder' => "ST"
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::FormField($name, $description, $optional, $options);
+  }
+
 }
 
 
@@ -1831,7 +1897,7 @@ class PostalCodeFormField extends FormField {
       'annotation' => is_string($options) ? $options : ''
       // [2012-12-12 ptw] Mobile Webkit inserts commas if you use 'number'
       ,'type' => "text"
-      ,'title' => "Postal code"
+      ,'title' => "postal code"
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
     // Can't really do any validation on postal codes, they are too random!
@@ -1866,7 +1932,7 @@ class PhoneFormField extends PatternFormField {
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
     parent::PatternFormField($name, $description, $optional, $options);
   }
-  
+
   function isvalid ($value) {
     if ((! $this->required) && empty($value)) {
       return true;
@@ -1881,7 +1947,7 @@ class PhoneFormField extends PatternFormField {
     }
     return false;
   }
-  
+
   function canonical ($value) {
     $value = parent::canonical($value);
     $matches = array();
@@ -2132,7 +2198,7 @@ class TextAreaFormField extends FormField {
     // Higlight incorrect values
     $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
     // Only insert the current value if it is valid.
-    $val = ($this->hasvalue()) ? $this->HTMLValue() :  htmlspecialchars($this->default, ENT_QUOTES);
+    $val = ($this->hasvalue()) ? $this->HTMLValue() :  htmlentities($this->default, ENT_QUOTES, "UTF-8");
     return
 <<<QUOTE
 
@@ -2180,7 +2246,7 @@ class ChoiceItem {
   }
 
   function HTMLValue() {
-    return htmlspecialchars($this->name, ENT_QUOTES);
+    return htmlentities($this->name, ENT_QUOTES, "UTF-8");
   }
 
   function TextValue() {
@@ -2188,7 +2254,7 @@ class ChoiceItem {
   }
 
   function description() {
-    return htmlspecialchars($this->description, ENT_QUOTES);
+    return htmlentities($this->description, ENT_QUOTES, "UTF-8");
   }
 }
 
@@ -2243,10 +2309,10 @@ class SimpleChoiceFormField extends FormField {
   function setForm($form) {
     parent::setForm($form);
     if ($this->choices == null) {
-      $this->choices = $this->form->choicesForField($this->name);
+      $this->choices = $form->choicesForField($this->id);
     } else if ($form instanceof DatabaseForm) {
       // If the database defines an enum, we need to use it for our choice array
-      $choices = $this->form->choicesForField($this->name);
+      $choices = $form->choicesForField($this->id);
       if ($choices) {
         $this->choices = $choices;
       }
@@ -2296,7 +2362,7 @@ class SimpleChoiceFormField extends FormField {
       if ($choice instanceof ChoiceItem) {
         return $choice->HTMLValue();
       } else {
-        return htmlspecialchars($choice, ENT_QUOTES);
+        return htmlentities($choice, ENT_QUOTES, "UTF-8");
       }
     } else {
       return "";
@@ -2396,7 +2462,7 @@ QUOTE;
       if ($value instanceof ChoiceItem) {
         $desc = $value->description();
       } else {
-        $desc = htmlspecialchars($value, ENT_QUOTES);
+        $desc = htmlentities($value, ENT_QUOTES, "UTF-8");
       }
       $element .=
 <<<QUOTE
@@ -2514,7 +2580,7 @@ class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
         if ($choice instanceof ChoiceItem) {
           $html[] = $choice->HTMLValue();
         } else {
-          $html[] = htmlspecialchars($choice, ENT_QUOTES);
+          $html[] = htmlentities($choice, ENT_QUOTES, "UTF-8");
         }
       }
       return join(",", $html);
@@ -2635,7 +2701,7 @@ QUOTE;
       if ($value instanceof ChoiceItem) {
         $desc = $value->description();
       } else {
-        $desc = htmlspecialchars($value, ENT_QUOTES);
+        $desc = htmlentities($value, ENT_QUOTES, "UTF-8");
       }
       $element .=
 <<<QUOTE
@@ -2745,7 +2811,7 @@ QUOTE;
       if ($value instanceof ChoiceItem) {
         $desc = $value->description();
       } else {
-        $desc = htmlspecialchars($value, ENT_QUOTES);
+        $desc = htmlentities($value, ENT_QUOTES, "UTF-8");
       }
       $element .=
 <<<QUOTE
@@ -2853,7 +2919,7 @@ class MenuItem {
   }
 
   function HTMLValue() {
-    return htmlspecialchars($this->name, ENT_QUOTES);
+    return htmlentities($this->name, ENT_QUOTES, "UTF-8");
   }
 
   function TextValue() {
@@ -2899,7 +2965,7 @@ QUOTE;
         <option value="{$key}"{$selected}>&nbsp;&nbsp;{$desc}</option>
 QUOTE;
       } else {
-        $desc = htmlspecialchars($value, ENT_QUOTES);
+        $desc = htmlentities($value, ENT_QUOTES, "UTF-8");
         $element .=
 <<<QUOTE
 
