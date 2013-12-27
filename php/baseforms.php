@@ -32,7 +32,7 @@
 // General form classes
 //
 
-include_once("subroutines.php");
+require_once "subroutines.php";
 
 function PHPtoSQL($val) {
   // Don't quote numbers
@@ -984,12 +984,14 @@ QUOTE;
       echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
       echo "</p>";
     }
-    if (! $result = mysql_query($sql, $database)) {
+    if (! $result = $database->query($sql)) {
       if ($debugging) {
         echo "<p style='font-size: smaller'>";
-        echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
-        echo "<br>";
-        echo "[Error: <span style='font-style: italic'>" . mysql_error() . "</span>]";
+        if ($debugging <= 2) {
+          echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
+          echo "<br>";
+        }
+        echo "[Error: <span style='font-style: italic'>{$database->error} (#{$database->errno})</span>]";
         echo "</p>";
       }
     }
@@ -1015,7 +1017,7 @@ QUOTE;
       $sql .= ", ";
       $sql .= $additional;
     }
-    $success = $this->SQLExecuteQuery($sql, $database) ? mysql_insert_id($database) : NULL;
+    $success = $this->SQLExecuteQuery($sql, $database) ? $database->insert_id() : NULL;
     if ($success) {
       $this->finalize();
     }
@@ -1085,7 +1087,8 @@ QUOTE;
   // Just a wrapper for SQLSelect without additions
   function SQLLoad($id, $options=NULL) {
     $result = $this->SQLSelect($id, null, $options);
-    $source = mysql_fetch_array($result);
+    $source = $result->fetch_array();
+    $result->close();
     return $source ? $this->parseValues($source) : NULL;
   }
 }  

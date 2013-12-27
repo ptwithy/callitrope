@@ -38,14 +38,35 @@
 ///
 
 ///
+// Helper to format mysqli errors
+//
+function format_mysqli_error($what=NULL, $mysqli=NULL) {
+  global $db;
+  if ((! $mysqli) && $db) { $mysqli = $db; }
+  if (what == NULL) {
+    $what = "";
+    if ($mysqli) { $what = "MySQL error: "; }
+  }
+  return "{$what}{$mysqli->error} (#{$mysqli->errno})";
+}
+
+
+///
 // Helper function to report any errors
-function print_error_and_exit () {
-    global $debugging;
+function print_error_and_exit($what=NULL, $mysqli=NULL) {
+    global $debugging, $db;
     echo "<p style='font-size: larger'>Error: Service Temporarily Unavailable. Please try again later.</p>";
-    if ($debugging) {
-        echo "<p style='font-size: smaller'>";
-        echo "[Additional information: <span style='font-style: italic'>" . mysql_error() . "</span>]";
-        echo "</p>";
+    if (! $mysqli) { $mysqli = $db; }
+    if ((what == NULL) && $mysqli) { $what = "MySQL error: "; }
+    if ($debugging && $mysqli && $mysqli->connect_errno) {
+        echo <<<QUOTE
+        <p style='font-size: smaller'>"
+          [Additional information:
+            <span style='font-style: italic'>" . 
+              MySQL connect error: {$mysqli->connect_error} (#{$mysqli->connect_errno})
+            </span>]
+        </p>
+QUOTE;
     }
     exit;
 }
@@ -159,9 +180,9 @@ function u2h($what) {
 
 ///
 // Used to display SQL errors
-// e.g., 'mysql_query(...) or ode();'
-function ode() {
-    die("Error #". mysql_errno() . ": " . mysql_error());
+// e.g., 'mysqli->query(...) or ode();'
+function ode($what=NULL, $mysqli=NULL) {
+  die(format_mysqli_error($what, $mysqli));
 }
 
 ///
@@ -242,11 +263,12 @@ function lookup_from_table($db, $table, $key, $value, $sort = "", $where = "") {
         $selector .= " WHERE $where";
     }
     $selector .= " ORDER BY $sort";
-    $query = mysql_query($selector, $db) or ode();
+    $query = $db->query($selector) or ode();
     $array = array();
-    while ($object = mysql_fetch_object($query)) {
+    while ($object = $query->fetch_object()) {
         $array[$object->key] = $object->value;
     }
+    $query->close();
     return $array;
 }
 
@@ -257,10 +279,9 @@ function lookup_from_table($db, $table, $key, $value, $sort = "", $where = "") {
 // @param $table: the table
 function lookups_from_table_enums ($db, $table) {
   $selector = "SHOW COLUMNS FROM $table";
-  $query = mysql_query($selector, $db) or ode();
+  $query = $db->query($selector) or ode();
   $array = array();
-
-  while($row = mysql_fetch_object($query)) {
+  while($row = $query->fetch_object()) {
     if(preg_match('/^(set|enum)/', $row->Type)) {
       // enums start at 1, 0 is an invalid entry
       $start = preg_match('/^set/', $row->Type) ? 0 : 1;
@@ -276,6 +297,7 @@ function lookups_from_table_enums ($db, $table) {
       $array[$row->Field] = $map;
     }
   }
+  $query->close();
   return $array;
 }
 
@@ -347,11 +369,12 @@ function menu_from_table($db, $table, $name, $key, $value, $select = "", $proper
 // Field, Type, Null, Key, Default, Extra
 function columns_of_table($db, $table) {
     $selector = "SHOW COLUMNS FROM $table";
-    $query = mysql_query($selector, $db) or ode();
+    $query = $db->query($selector) or ode();
     $columns = array();
-    while ($row = mysql_fetch_object($query)) {
+    while ($row = $query->fetch_object()) {
         $columns[$row->Field] = $row;
     }
+    $query->close();
     return $columns;
 }
 
