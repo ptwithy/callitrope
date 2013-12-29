@@ -43,7 +43,7 @@
 function format_mysqli_error($what=NULL, $mysqli=NULL) {
   global $db;
   if ((! $mysqli) && $db) { $mysqli = $db; }
-  if (what == NULL) {
+  if ($what == NULL) {
     $what = "";
     if ($mysqli) { $what = "MySQL error: "; }
   }
@@ -57,7 +57,7 @@ function print_error_and_exit($what=NULL, $mysqli=NULL) {
     global $debugging, $db;
     echo "<p style='font-size: larger'>Error: Service Temporarily Unavailable. Please try again later.</p>";
     if (! $mysqli) { $mysqli = $db; }
-    if ((what == NULL) && $mysqli) { $what = "MySQL error: "; }
+    if (($what == NULL) && $mysqli) { $what = "MySQL error: "; }
     if ($debugging && $mysqli && $mysqli->connect_errno) {
         echo <<<QUOTE
         <p style='font-size: smaller'>"
@@ -70,6 +70,51 @@ QUOTE;
     }
     exit;
 }
+
+///
+// Connect to a database
+function SQLConnect($parameters) {
+  global $debugging;
+  if (! ($mysqli = ($debugging ?
+    mysqli_connect($parameters['host'], $parameters['user'], $parameters['password'], $parameters['database']) :
+    @mysqli_connect($parameters['host'], $parameters['user'], $parameters['password'], $parameters['database']))
+    )) {
+    print_error_and_exit();
+  }
+  if ($debugging && $mysqli && $mysqli->connect_errno) {
+    echo <<<QUOTE
+      <p style='font-size: smaller'>"
+        [Additional information:
+        <span style='font-style: italic'>" . 
+          MySQL connect error: {$mysqli->connect_error} (#{$mysqli->connect_errno})
+        </span>]
+      </p>
+QUOTE;
+  } 
+  return $mysqli;
+}
+
+function SQLExecuteQuery($sql, $database) {
+  global $debugging;
+  if ($debugging > 2) {
+    echo "<p style='font-size: smaller'>";
+    echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
+    echo "</p>";
+  }
+  if (! $result = $database->query($sql)) {
+    if ($debugging) {
+      echo "<p style='font-size: smaller'>";
+      if ($debugging <= 2) {
+        echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
+        echo "<br>";
+      }
+      echo "[Error: <span style='font-style: italic'>{$database->error} (#{$database->errno})</span>]";
+      echo "</p>";
+    }
+  }
+  return $result;
+}
+
 
 ///
 // Validate an email address

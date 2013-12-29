@@ -8,30 +8,33 @@
 // A field of subfields
 //
 class FormMultiField extends FormField {
+  var $fieldspecs;
   var $fields;
   
   function FormMultiField ($name, $description, $fields, $optional=false, $options = NULL) {
-    $this->fields = $fields;
+    $this->fieldspecs = $fields;
     parent::FormField($name, $description, $optional, $options);
   }
 
   function setInstance($instance=NULL) {
     parent::setInstance($instance);
-    foreach ($this->fields as $key => $field) { 
+    foreach ($this->fieldspecs as $key => $field) { 
       $field->setInstance($instance);
     }
   }
   
   function setForm($form) {
     parent::setForm($form);
-    foreach ($this->fields as $key => $field) { 
-      $field->setForm($form);
-    }
     $fields = array();
-    // Adjust field keys to be field id's
-    foreach ($this->fields as $field) {
-      $fields[$field->id] = $field;
+    foreach ($this->fieldspecs as $spec) {
+      // Add the field (also sets the form on the field)
+      // And if it is a field (result is non-null) add 
+      // it to our list of fields
+      if ($field = $form->addField($spec, true)) {
+        $fields[$field->id] = $field;
+      }
     }
+    $this->fields = $fields;
   }
 
   // A non-required field is only valid if all of its required

@@ -75,6 +75,13 @@ class FieldSpec {
     $this->optional = $optional;
     $this->options = $options;
   }
+  
+  function setInstance($instance=NULL) {
+    $instance = is_null($instance) ? '' : $instance;
+    $this->id = "{$this->name}{$instance}";
+    $multiple = is_null($instance) ? '' : $instance; // Was '[]', but POST does not preserve order?
+    $this->input = "{$this->name}{$multiple}";
+  }
 }
 
 ///
@@ -229,7 +236,7 @@ class Form {
         return new BirthdateFormField($name, $description, $optional, $options);
       case "daytime":
       case "time":
-        if (array_key_exists('start', $options)) {
+        if (is_array($options) && array_key_exists('start', $options)) {
           return new SimpleTimeFormField($name, $description, $optional, $options);
         } else {
           return new DaytimeFormField($name, $description, $optional, $options);
@@ -274,41 +281,52 @@ class Form {
       $columns = array_diff_key($columns, array_flip($omit));
     }
     if ($debugging > 1) {
-      echo "<pre>\$columns => " . print_r($columns) . "<pre>";
+      echo "<pre>\$this->columns => " . implode(array_keys($this->columns), " ") . "<pre>";
+      echo "<pre>\$this->fields => " . implode(array_keys($this->fields), " ") . "<pre>";
     }
     foreach ($columns as $field => $desc) {
       if ($debugging > 2) {
-        echo "<pre>{$field} => " . print_r($desc) . "<pre>";
+        echo "<pre>{$field} => " . var_export($desc) . "<pre>";
       }
-      $f = field($field, null);
-      if (array_key_exists($f->id, $this->fields)) {
+      // Have to expand field specs to compare id's
+      $f = $this->fieldInternal(field($field, null));
+      if (array_key_exists($f->id, $this->allFields)) {
         // Don't add fields that have already been added
+        if ($debugging > 1) {
+          echo "<pre>existing: {$f}<pre>";
+        }
       } else if (($f->id == $this->idname) ||
                  ($f->id == $this->createdname) ||
                  ($f->id == $this->modifiedname)) {
         // Don't add any of the special database fields
+        if ($debugging > 1) {
+          echo "<pre>special: {$f}<pre>";
+        }
       } else {
         // Ok, add it
+        if ($debugging > 1) {
+          echo "<pre>auto-adding: {$f}<pre>";
+        }
         $this->addField($f);
-      }
-      if ($debugging > 1) {
-        echo "<pre>{$field} => " . $f . "<pre>";
       }
     }
   }
   
-  // This holds all the fields in the form.  Each time you create
+  // This holds the fields in the form.  Each time you create
   // a field, it will be added to this array.
   var $fields;
+  // This includes subfields, for autoAddFields to filter by
+  // (see FormMultiField)
+  var $allFields;
 
   var $fieldOrder;
   // Sets the order of the fields in the form
   // If no ordering is passed, uses the database ordering
   function setFieldOrder($ordering=NULL) {
-    if (is_array($this->fieldOrder)) {
+    if (is_array($ordering)) {
       $this->fieldOrder = $ordering;
     } else {
-      $this->fieldOrder = $this->columns;
+      $this->fieldOrder = array_keys($this->columns);
     }
   }
 
@@ -335,6 +353,7 @@ class Form {
     $this->errorMessages = array();
     $this->enums = array();
     $this->fields = array();
+    $this->allFields = array();
     $this->sections = array();
     $this->startSection($name);
   }
@@ -359,7 +378,7 @@ class Form {
       $ordering = $this->fieldOrder;
       $newfields = array();
       $oldfields = $this->fields;
-      foreach ($ordering as $field => $value) {
+      foreach ($ordering as $field) {
         if (array_key_exists($field, $oldfields)) {
           $newfields[$field] = $oldfields[$field];
         }
@@ -384,7 +403,6 @@ class Form {
       $field->head();
     }  
   }
-  
   
   function isValidPost() {
     return array_key_exists('process', $_POST) && ($_POST['process'] == $this->process);
@@ -418,14 +436,19 @@ class Form {
     }
   }
 
-  function addField($formField) {
+  function addField($formField, $subfield=false) {
     // Look for, and instantiate delayed FieldSpec
     if ($formField instanceof FieldSpec) {
       $formField = $this->fieldInternal($formField);
     }
     if ($formField instanceof FormField) {
-      $this->fields[$formField->id] = $formField;
+      // Track for auto-add
+      $this->allFields[$formField->id] = $formField;
+      if (!$subfield) {
+        $this->fields[$formField->id] = $formField;
+      }
       $formField->setForm($this);
+      return $formField;
     } else {
       $this->fields[] = $formField;
     }
@@ -433,7 +456,7 @@ class Form {
   
   function addFields($fields) {
     foreach ($fields as $f) {
-      $this->addfield($f);
+      $this->addField($f);
     }
   }
 
@@ -805,9 +828,10 @@ class DatabaseForm extends Form {
   var $modifiedname;
   
   function DatabaseForm($database, $table, $options=null) {
-    // default options
-    $this->database = $database;
+    global $debugging;
+    $this->database = SQLConnect($database);     
     $this->table = $table;
+    // default options
     $defaultoptions = array('name' => $table, 'action' => "", 'method' => "post", 'usedivs' => false, 'idname' => NULL, 'createdname' => NULL, 'modifiedname' => NULL);
     $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions; 
     parent::Form($options['name'], $options['action'], $options['method'], $options['usedivs']);
@@ -869,6 +893,11 @@ class DatabaseForm extends Form {
         $this->recordID = clean($_POST[$idname]);
       }
     }
+  }
+  
+  function finalize() {
+    $this->database->close();
+    parent::finalize();
   }
 
   // Processes the buttons
@@ -975,28 +1004,6 @@ QUOTE;
     }
     return parent::HTMLForm($process, $buttons);
   }
-
-  // Make the query, report any errors
-  function SQLExecuteQuery($sql, $database) {
-    global $debugging;
-    if ($debugging > 2) {
-      echo "<p style='font-size: smaller'>";
-      echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
-      echo "</p>";
-    }
-    if (! $result = $database->query($sql)) {
-      if ($debugging) {
-        echo "<p style='font-size: smaller'>";
-        if ($debugging <= 2) {
-          echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
-          echo "<br>";
-        }
-        echo "[Error: <span style='font-style: italic'>{$database->error} (#{$database->errno})</span>]";
-        echo "</p>";
-      }
-    }
-    return $result;
-  }
     
   // Insert the values into the table
   function SQLInsert($additional = "", $options=NULL) {
@@ -1017,7 +1024,7 @@ QUOTE;
       $sql .= ", ";
       $sql .= $additional;
     }
-    $success = $this->SQLExecuteQuery($sql, $database) ? $database->insert_id() : NULL;
+    $success = SQLExecuteQuery($sql, $database) ? $database->insert_id() : NULL;
     if ($success) {
       $this->finalize();
     }
@@ -1043,7 +1050,7 @@ QUOTE;
       $sql .= $additional;
     }
     $sql .= " WHERE {$idname} = " . PHPtoSQL($id);
-    $success = $this->SQLExecuteQuery($sql, $database) ? $id : NULL;
+    $success = SQLExecuteQuery($sql, $database) ? $id : NULL;
     if ($success) {
       $this->finalize();
     }
@@ -1060,7 +1067,7 @@ QUOTE;
     $idname = $options['idname'];
     $id = $this->recordID ? $this->recordID : $this->fieldValue($idname);
     $sql = "DELETE FROM " . $table . " WHERE {$idname} = " . PHPtoSQL($id);
-    $success =  $this->SQLExecuteQuery($sql, $database) ? $id : NULL;
+    $success =  SQLExecuteQuery($sql, $database) ? $id : NULL;
     if ($success) {
       $this->finalize();
     }
@@ -1080,7 +1087,7 @@ QUOTE;
       $sql .= ", ";
       $sql .= $additional;
     }
-    return $this->SQLExecuteQuery($sql, $database);
+    return SQLExecuteQuery($sql, $database);
   }
   
   // Load the form from the table
@@ -1192,13 +1199,16 @@ class FormField {
     $this->form = $form;
     if ($form->columns && array_key_exists($this->id, $form->columns)) {
       $descriptor = $form->columns[$this->id];
-      // Non-nullable fields are required
-      $this->required = ($descriptor->Null != 'YES');
+      // Non-nullable non-string fields are required
+      // (strings can be optional by being empty)
+      if (! preg_match("/varchar|text/i", $descriptor->Type)) {
+        $this->required = ($descriptor->Null != 'YES');
+      }
       // Pick up any default
       if ($descriptor->Default) { $this->default = $descriptor->Default; }
-      // Pick up test lengths
+      // Pick up text lengths
       if ($this->maxlength == NULL) {
-        if (preg_match("/VARCHAR\\((\\d*)\\)/", $descriptor->Type, $regs)) {
+        if (preg_match("/varchar\\((\\d*)\\)/i", $descriptor->Type, $regs)) {
           $this->maxlength = 0 + $regs[1];
         }
       }
@@ -1472,7 +1482,8 @@ QUOTE;
   }
   
   function __toString() {
-    return get_class($this) . ": (" . var_export($this->options, true) . ") " . $this->SQLForm();
+    global $debugging;
+    return get_class($this) . "#{$this->id}" . ($debugging > 3 ? (": (" . var_export($this->options, true) . ")") : "") . " " . $this->SQLForm();
   }
 
   // SQL column specification
@@ -2317,6 +2328,10 @@ class SimpleChoiceFormField extends FormField {
       // If the database defines an enum, we need to use it for our choice array
       $choices = $form->choicesForField($this->id);
       if ($choices) {
+        // We allow renaming/limiting the choices
+        if ($this->choices != null) {
+          $choices = array_intersect_key($this->choices, $choices);
+        }
         $this->choices = $choices;
       }
     }
@@ -2854,6 +2869,14 @@ class SimpleTimeFormField extends SimpleMenuFormField {
 
   function SimpleTimeFormField($name, $description, $optional=false, $options=NULL) {
     global $html5;
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'start' => 0
+      ,'end' => 24
+      ,'interval' => 1
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
     $choices = array();
     $start = $options['start'];
     $end = $options['end'];
