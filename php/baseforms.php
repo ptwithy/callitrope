@@ -1024,7 +1024,7 @@ QUOTE;
       $sql .= ", ";
       $sql .= $additional;
     }
-    $success = SQLExecuteQuery($sql, $database) ? $database->insert_id() : NULL;
+    $success = SQLExecuteQuery($sql, $database) ? $database->insert_id : NULL;
     if ($success) {
       $this->finalize();
     }
@@ -2532,15 +2532,19 @@ class RadioFormField extends SimpleRadioFormField {
 // one choice.
 //
 class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
+  // This is because we might have a single-checkbox that is mapped to an enum
+  // which will start with 1 rather than 0
+  var $offset = 0;
 
   function SimpleMultipleChoiceFormField($name, $description, $optional=false, $options=NULL) {
     parent::SimpleChoiceFormField($name, $description, $optional, $options);
+    if (! array_key_exists(0, $this->choices)) { $this->offset = 1; }
   }
   
   function unpack($value) {
     $keyarray = array();
     foreach ($this->choices as $key => $val) {
-      if (((1 << $key) & $value) != 0) {
+      if (((1 << ($key - $this->offset)) & $value) != 0) {
         $keyarray[] = $key;
       }
     }
@@ -2617,7 +2621,7 @@ class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
         $val = PHPtoSQL($val);
         $strings[] = $val;
         if (is_numeric($val)) {
-          $number |= 1 << $val;
+          $number |= 1 << ($val - $this->offset);
         } else {
           $isnumeric = false;
         }
