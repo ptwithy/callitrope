@@ -2323,7 +2323,12 @@ class SimpleChoiceFormField extends FormField {
   function setForm($form) {
     parent::setForm($form);
     if ($this->choices == null) {
-      $this->choices = $form->choicesForField($this->id);
+      if (isset($this->options['relatedtable'])) {
+        $related = $this->options['relatedtable'];
+        $this->choices = lookup_from_table($form->database, $related['name'], $related['key'], $related['value'], $related['sort']);
+      } else {
+        $this->choices = $form->choicesForField($this->id);
+      }
     } else if ($form instanceof DatabaseForm) {
       // If the database defines an enum, we need to use it for our choice array
       $choices = $form->choicesForField($this->id);
