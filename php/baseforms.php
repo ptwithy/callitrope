@@ -1146,6 +1146,8 @@ class FormField {
   var $priority = 0;
   // For debugging
   var $options;
+  // By default, we do not allow URI's in fields -- they smell like spam
+  var $allowURI = false;
 
   // Create a form field.  Arguments are:
   // @param name:String The name of the field
@@ -1167,6 +1169,7 @@ class FormField {
       ,'autosubmit' => false
       ,'maxlength' => NULL
       ,'default' => NULL
+      ,'allowURI' => false
     );
     $this->options = $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
 
@@ -1180,7 +1183,8 @@ class FormField {
     $this->readonly = $options['readonly'];
     $this->autosubmit = $options['autosubmit'];
     $this->maxlength = $options['maxlength'];
-    $this->default =$options['default'];
+    $this->default = $options['default'];
+    $this->allowURI = $options['allowURI'];
     $this->valid = true;
     $this->priority = $options['priority'];
     $this->setInstance($options['instance']);
@@ -1218,13 +1222,17 @@ class FormField {
   function setAnnotation($annotation) {
     $this->annotation = $annotation;
   }
+  
+  var $uriregex = '`(?:http|https|ftp)://[^\s]+`i';
 
   // Tests if a value is valid for this field
   function isvalid($value) {
-    if ((! $this->required) && empty($value)) {
+    if (empty($value)) {
+      return (! $this->required);
+    } else if ($this->allowURI) {
       return true;
     } else {
-      return (isset($value) && ($value !== ''));
+      return (! preg_match($this->uriregex, $value));
     }
   }
 
@@ -1239,12 +1247,24 @@ class FormField {
 
   // Creates an error message telling how to correct your errors.
   function errorMessage() {
-    if ($this->required) {
-      return $this->description . " is a required field. Please enter it below.";
+    if (empty($this->value) && $this->required) {
+      return "{$this->description} is a required field. Please enter it below.";
     } else {
-      return $this->description . ': "' . $this->ErrorValue() . '" is not a valid entry.';
+      $title = isset($this->title) ? $this->title : "entry";
+      $message = "{$this->description}: '" . $this->ErrorValue() . "' is not a valid {$title}.";
+      if ((! $this->allowURI) && preg_match($this->uriregex, $this->value)) {
+        $message .= " (URI's are not permitted.)";
+      } else if (isset($this->title)) {
+        $message .= " Please enter a valid {$title}";
+        if (isset($this->placeholder)) {
+          $message .= " ({$this->placeholder})";
+        }
+        $message .= ".";
+      }
+      return $message;
     }
   }
+  
 
   // Creates a canonical version of the value for this field
   function canonical($value) {
@@ -1625,16 +1645,6 @@ class SimpleNumberFormField extends FormField {
     }
   }
 
-  function errorMessage () {
-    if (empty($this->value) && $this->required) {
-      return $this->description . " is a required field. Please enter it below.";
-    }
-    return $this->description . ': "' . $this->ErrorValue() . '" is not a valid '
-      . $this->title
-      . '. Please enter a valid ' . $this->title
-      . ($this->placeholder ? (' (' . $this->placeholder . ')') : '')    . '.';
-  }
-
   function additionalInputAttributes () {
     $attrs = parent::additionalInputAttributes();
     if ($this->min != null) {
@@ -1714,16 +1724,6 @@ abstract class PatternFormField extends FormField {
       return parent::isvalid($value) &&
         preg_match($this->pattern, $value);
     }
-  }
-
-  function errorMessage () {
-    if (empty($this->value) && $this->required) {
-      return $this->description . " is a required field. Please enter it below.";
-    }
-    return $this->description . ': "' . $this->ErrorValue() . '" is not a valid '
-      . $this->title
-      . '. Please enter a valid ' . $this->title
-      . ($this->placeholder ? (' (' . $this->placeholder . ')') : '')    . '.';
   }
 
   function additionalInputAttributes () {
@@ -2211,8 +2211,7 @@ class TextAreaFormField extends FormField {
   function HTMLFormElement() {
     // Higlight incorrect values
     $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
-    // Only insert the current value if it is valid.
-    $val = ($this->hasvalue()) ? $this->HTMLValue() :  htmlentities($this->default, ENT_QUOTES, "UTF-8");
+    $val = ($this->value) ? $this->HTMLValue() :  htmlentities($this->default, ENT_QUOTES, "UTF-8");
     return
 <<<QUOTE
 
@@ -2543,9 +2542,14 @@ class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
 
   function SimpleMultipleChoiceFormField($name, $description, $optional=false, $options=NULL) {
     parent::SimpleChoiceFormField($name, $description, $optional, $options);
-    if (! array_key_exists(0, $this->choices)) { $this->offset = 1; }
   }
   
+  function setForm($form) {
+    parent::setForm($form);
+    // We should have our choices now.
+    if ($this->choices && (! array_key_exists(0, $this->choices))) { $this->offset = 1; }
+  }    
+
   function unpack($value) {
     $keyarray = array();
     foreach ($this->choices as $key => $val) {
