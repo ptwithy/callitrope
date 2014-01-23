@@ -1252,7 +1252,7 @@ class FormField {
     } else {
       $title = isset($this->title) ? $this->title : "entry";
       $message = "{$this->description}: '" . $this->ErrorValue() . "' is not a valid {$title}.";
-      if ((! $this->allowURI) && preg_match($this->uriregex, $this->value)) {
+      if (is_string($this->value) && (! $this->allowURI) && preg_match($this->uriregex, $this->value)) {
         $message .= " (URI's are not permitted.)";
       } else if (isset($this->title)) {
         $message .= " Please enter a valid {$title}";
@@ -2627,8 +2627,10 @@ class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
       $isnumeric = true;
       // NOT choice -- SQL Stores representation
       foreach ($this->value as $val) {
-        $val = PHPtoSQL($val);
-        $strings[] = $val;
+        // NOT this, because a set of strings should not have the inner strings quoted
+        // $val = PHPtoSQL($val);
+        // But we _do_ need slashes
+        $strings[] = addslashes($val);
         if (is_numeric($val)) {
           $number |= 1 << ($val - $this->offset);
         } else {
