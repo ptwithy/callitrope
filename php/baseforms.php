@@ -2596,8 +2596,10 @@ class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
       $isnumeric = true;
       // NOT choice -- SQL Stores representation
       foreach ($this->value as $val) {
-        $val = PHPtoSQL($val);
-        $strings[] = $val;
+        // NOT this, because a set of strings should not have the inner strings quoted
+        // $val = PHPtoSQL($val);
+        // But we _do_ need slashes
+        $strings[] = addslashes($val);
         if (is_numeric($val)) {
           $number |= 1 << $val;
         } else {
