@@ -68,8 +68,6 @@ class FieldSpec {
   
   function FieldSpec($name, $description, $type, $optional, $options) {
     $this->name = $name;
-    $instance = isset($options['instance']) ? $options['instance'] : '';
-    $this->id = "{$name}{$instance}";
     $this->description = $description;
     $this->type = $type;
     $this->optional = $optional;
@@ -77,10 +75,13 @@ class FieldSpec {
   }
   
   function setInstance($instance=NULL) {
-    $instance = is_null($instance) ? '' : $instance;
+    if (! is_null($instance)) {
+        $this->options['instance'] = $instance;
+    } else {
+        $instance = '';
+    }
+    // Has to be correct for fieldInternal
     $this->id = "{$this->name}{$instance}";
-    $multiple = is_null($instance) ? '' : $instance; // Was '[]', but POST does not preserve order?
-    $this->input = "{$this->name}{$multiple}";
   }
 }
 
@@ -1427,7 +1428,7 @@ QUOTE;
   function HTMLTableColumn() {
     $classname = get_class($this);
     $element = <<<QUOTE
-      <!-- {$classname} -->
+      <!-- {$classname} {$this->name} {$this->instance} -->
 QUOTE;
     $element .= $this->HTMLFormElement();
     if ($this->readonly) {

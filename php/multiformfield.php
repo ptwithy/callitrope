@@ -20,7 +20,6 @@ class FormMultiField extends FormField {
       ,'showlabels' => false
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-
     $this->showlabels = $options['showlabels'];  
     $this->fieldspecs = $fields;
     parent::FormField($name, $description, $optional, $options);
