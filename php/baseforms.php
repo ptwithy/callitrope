@@ -2717,7 +2717,7 @@ class MultipleChoiceFormField extends SimpleMultipleChoiceFormField {
 // @param choices:array An array of the possible choices
 class SimpleCheckboxFormField extends SimpleMultipleChoiceFormField {
 
-  function CheckboxFormField($name, $description, $optional=false, $options=NULL) {
+  function SimpleCheckboxFormField($name, $description, $optional=false, $options=NULL) {
     parent::SimpleMultipleChoiceFormField($name, $description, $optional, $options);
   }
 
@@ -2823,8 +2823,17 @@ class CheckboxFormField extends SimpleCheckboxFormField {
 //
 // @param choices:array An array of the possible choices
 class SimpleMenuFormField extends SimpleChoiceFormField {
-
-  function MenuFormField($name, $description, $optional=false, $options=NULL) {
+  var $selectlabel;
+  
+  function SimpleMenuFormField($name, $description, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'selectlabel' => NULL
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    $this->selectlabel = $options['selectlabel'];
     parent::SimpleChoiceFormField($name, $description, $optional, $options);
   }
 
@@ -2833,8 +2842,9 @@ class SimpleMenuFormField extends SimpleChoiceFormField {
   function HTMLFormElement() {
     global $debugging;
     $additional = $this->additionalInputAttributes();
-    // Higlight incorrect values
+    // Highlight incorrect values
     $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
+    $selectlabel = $this->selectlabel ? $this->selectlabel : "Select {$this->description}";
     $element = '';
     // Debugging
     if ($debugging > 2) {
@@ -2847,7 +2857,7 @@ class SimpleMenuFormField extends SimpleChoiceFormField {
 <<<QUOTE
 
       <select{$class} name="{$this->input}" id="{$this->id}"{$additional}>
-        <option value="{$this->invalidChoice}">Select {$this->description}</option>
+        <option value="{$this->invalidChoice}">{$selectlabel}</option>
 QUOTE;
     foreach ($this->choices as $key => $value) {
       $selected = ($this->value === $key) ? " selected" : "";
