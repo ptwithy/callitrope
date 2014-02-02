@@ -1455,26 +1455,35 @@ QUOTE;
 <<<QUOTE
 
       <{$tr} class="{$rowclass}">
+QUOTE;
+    if ((! empty($this->description)) || (! $usedivs)) {
+      $form .=
+<<<QUOTE
         <{$td} class="label">
 QUOTE;
-    if (isset($this->description)) {
+    }
+    if (! empty($this->description)) {
       $form .=
 <<<QUOTE
           <label for="{$this->id}">{$this->description}</label>{$req}
 QUOTE;
     }
-    $form .=
+    if ((! empty($this->description)) || (! $usedivs)) {
+      $form .=
 <<<QUOTE
         </{$td}>
+QUOTE;
+    }
+    $form .=
+<<<QUOTE
         <{$td} class="field">
 QUOTE;
     $form .= $this->HTMLTableColumn();
     $form .=
 <<<QUOTE
-
         </{$td}>
 QUOTE;
-    if (isset($this->annotation)) {
+    if (! empty($this->annotation)) {
       $form .=
 <<<QUOTE
 

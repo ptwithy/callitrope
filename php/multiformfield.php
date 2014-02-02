@@ -10,8 +10,18 @@
 class FormMultiField extends FormField {
   var $fieldspecs;
   var $fields;
+  var $showlabels = false;
   
   function FormMultiField ($name, $description, $fields, $optional=false, $options = NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'showlabels' => false
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+
+    $this->showlabels = $options['showlabels'];  
     $this->fieldspecs = $fields;
     parent::FormField($name, $description, $optional, $options);
   }
@@ -113,7 +123,7 @@ QUOTE;
 <<<QUOTE
         <div class="{$field->name}">
 QUOTE;
-      $element .= $field->HTMLTableColumn();
+      $element .= ($this->showlabels ? $field->HTMLTableRow(true) : $field->HTMLTableColumn());
       $element .=
 <<<QUOTE
         </div>
