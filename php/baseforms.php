@@ -2377,7 +2377,9 @@ class SimpleChoiceFormField extends FormField {
     }
     // The canonical value needs to be `===` to the array key
     // since that is how we determine selected
-    return array_search($this->choices[$key], $this->choices);
+    // WE MUST USE STRICT, otherwise '16 & 18' == '16'!!!
+    // Jeezus PHP SUX!
+    return array_search($this->choices[$key], $this->choices, true);
   }
 
   // We have to be a little more particular here
