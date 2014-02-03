@@ -72,6 +72,7 @@ class FieldSpec {
     $this->type = $type;
     $this->optional = $optional;
     $this->options = $options;
+    $this->setInstance(($options && array_key_exists('instance', $options)) ? $options['instance'] : NULL);
   }
   
   function setInstance($instance=NULL) {
@@ -196,12 +197,18 @@ class Form {
         }
       }
       if ($type === null) {
-        $desc = $this->columns[$id];
-        $sqltype = $desc->Type;
-        foreach ($this->sqlTypeMap as $s => $t) {
-          if (stristr($s, $sqltype)) {
-            $type = $t;
-            break;
+        if (array_key_exists($id, $this->columns)) {
+          $desc = $this->columns[$id];
+          $sqltype = $desc->Type;
+          foreach ($this->sqlTypeMap as $s => $t) {
+            if (stristr($s, $sqltype)) {
+              $type = $t;
+              break;
+            }
+          }
+        } else {
+          if ($debugging) {
+            trigger_error("Unable to determine field type for {$id}");
           }
         }
       }
