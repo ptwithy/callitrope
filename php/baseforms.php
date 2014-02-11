@@ -2465,7 +2465,7 @@ class ChoiceFormField extends SimpleChoiceFormField {
 // A FormField that will be represented as a radio button
 //
 // @param choices:array An array of the possible choices
-class SimpleRadioFormField extends ChoiceFormField {
+class SimpleRadioFormField extends SimpleChoiceFormField {
 
   function SimpleRadioFormField($name, $description, $optional=false, $options=NULL) {
     // default options
