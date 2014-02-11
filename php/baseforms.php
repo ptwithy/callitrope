@@ -2424,7 +2424,7 @@ class ChoiceFormField extends SimpleChoiceFormField {
 // A FormField that will be represented as a radio button
 //
 // @param choices:array An array of the possible choices
-class SimpleRadioFormField extends ChoiceFormField {
+class SimpleRadioFormField extends SimpleChoiceFormField {
 
   function SimpleRadioFormField($name, $description, $optional=false, $options=NULL) {
     // default options
@@ -2676,7 +2676,7 @@ class MultipleChoiceFormField extends SimpleMultipleChoiceFormField {
 // @param choices:array An array of the possible choices
 class SimpleCheckboxFormField extends SimpleMultipleChoiceFormField {
 
-  function CheckboxFormField($name, $description, $optional=false, $options=NULL) {
+  function SimpleCheckboxFormField($name, $description, $optional=false, $options=NULL) {
     parent::SimpleMultipleChoiceFormField($name, $description, $optional, $options);
   }
 
@@ -2783,7 +2783,7 @@ class CheckboxFormField extends SimpleCheckboxFormField {
 // @param choices:array An array of the possible choices
 class SimpleMenuFormField extends SimpleChoiceFormField {
 
-  function MenuFormField($name, $description, $optional=false, $options=NULL) {
+  function SimpleMenuFormField($name, $description, $optional=false, $options=NULL) {
     parent::SimpleChoiceFormField($name, $description, $optional, $options);
   }
 
