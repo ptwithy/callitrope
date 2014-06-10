@@ -657,6 +657,7 @@ function pw_encode($password) {
     return hmac($seed, $password, 'md5', 64) . $seed;
 }
 
+
 ///
 // Check a password against the stored value
 //
@@ -675,7 +676,7 @@ function pw_check($password, $stored_value) {
 // @param int lifetime: number of seconds to live, defaults to forever
 // @param string path: defaults to /
 // @param string domain: defaults to whole domain
-// @param bool secure: defaults to false
+// @param bool secure: defaults to true for HTTPS, otherwise false
 // @param bool httponly: defaults to true
 function ptw_session_start($expires=null, $path=null, $domain=null, $secure=null, $httponly=null) {
     $name = "PHPSESSID";
@@ -693,7 +694,7 @@ function ptw_session_start($expires=null, $path=null, $domain=null, $secure=null
                              preg_replace('/:[0-9]*$/', '', $_SERVER['HTTP_HOST'])));
     }
     if (is_null($secure)) {
-        $secure = false;
+        $secure = array_key_exists('HTTPS', $_SERVER);
     }
     if (is_null($httponly)) {
         $httponly = true;
@@ -706,6 +707,32 @@ function ptw_session_start($expires=null, $path=null, $domain=null, $secure=null
         session_id($_COOKIE[$name]);
     }
     session_start();
+}
+
+///
+// Useful session ender
+//
+// Ensures session variables cleared, cookie cleared, session destroyed.
+function ptw_session_destroy() {
+  session_start();
+	$sessionName = session_name();
+	$sessionCookie = session_get_cookie_params();
+  // Unset all of the session variables.
+  $_SESSION = array();
+  // Clear the session cookie
+  // Note cookie parameters must match exactly, other than setting the
+  // content to the empty string, and the lifetime to the past
+	setcookie(
+	  $sessionName,
+	  '',
+	  time() - 3600,
+	  $sessionCookie['path'],
+	  $sessionCookie['domain'],
+	  $sessionCookie['secure'],
+	  $sessionCookie['httponly']
+	);
+  // Finally, destroy the session.
+  session_destroy();
 }
 
 ///

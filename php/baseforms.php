@@ -171,7 +171,7 @@ class Form {
     $optional = $fieldspec->optional;
     $options = $fieldspec->options;
     
-    $namemap = array("email", "number", "choice", "state", "region", "zip", "postal", "country", "phone", "cell", "birth", "date", "daytime", "time", "file", "image", "picture");
+    $namemap = array("email", "password", "number", "choice", "state", "region", "zip", "postal", "country", "phone", "cell", "birth", "date", "daytime", "time", "file", "image", "picture");
     if ($type == null) {
       foreach ($namemap as $n) {
         if (stristr($name, $n)) {
@@ -217,6 +217,8 @@ class Form {
     switch ($type) {
       case "email":
         return new EmailFormField($name, $description, $optional, $options);
+      case "password":
+        return new PasswordFormField($name, $description, $optional, $options);
       case "number":
         return new SimpleNumberFormField($name, $description, $optional, $options);
       case "state":
@@ -519,11 +521,13 @@ class Form {
       // http://stackoverflow.com/questions/1963245/multiple-submit-buttons-specifying-default-button
       $button = <<<QUOTE
 
+      <!-- editable: {$this->editable}, recordID: {$this->recordID} -->
       <input type="submit" style="position: absolute; left: -100%;" onclick="return false" >
 QUOTE;
     } else {
       $button = <<<QUOTE
 
+      <!-- editable: {$this->editable}, recordID: {$this->recordID} -->
       <input type="submit" name="submitButton" value="Submit Form" style="position: absolute; left: -100%;">    
 QUOTE;
     }
@@ -718,8 +722,8 @@ QUOTE;
   // all sections
   function SQLFields($section=null, $fields=null) {
     $sql = "";
-    if (! $fields) {
-      $fields = $section ? $this->sections[$section] : $this->fields;
+    if (! isset($fields)) {
+      $fields = isset($section) ? $this->sections[$section] : $this->fields;
     }
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
@@ -846,7 +850,8 @@ class DatabaseForm extends Form {
     $this->idname = $options['idname'];
     $this->createdname = $options['createdname'];
     $this->modifiedname = $options['modifiedname'];
-    $this->editable = $this->idname != NULL;
+    if (! array_key_exists('editable', $options)) { $options['editable'] = $this->idname != NULL; }
+    $this->editable = $options['editable'];
     $this->columns = columns_of_table($this->database, $this->table);
     $lookups = lookups_from_table_enums($this->database, $this->table);
     // Invert the maps to match form choices
@@ -1090,11 +1095,16 @@ QUOTE;
     $database = $options['database'];
     $table = $options['table'];
     $idname = $options['idname'];
-    $sql = "SELECT " . $this->SQLFields($options['section'], $options['fields']) . " FROM " . $table . (($id != null) ? (" WHERE {$idname} = " . PHPtoSQL($id)) : '');
+    $fields = $this->SQLFields($options['section'], $options['fields']);
+    $sql = "SELECT ";
+    if ($fields) {
+      $sql .= $fields;
+    }
     if ($additional) {
-      $sql .= ", ";
+      if ($fields) { $sql .= ", "; }
       $sql .= $additional;
     }
+    $sql .=  " FROM " . $table . (($id != null) ? (" WHERE {$idname} = " . PHPtoSQL($id)) : '');
     return SQLExecuteQuery($sql, $database);
   }
   
@@ -1754,6 +1764,34 @@ abstract class PatternFormField extends FormField {
 // This works poorly in Safari 5 (won't submit, but no feedback
 //    $attrs .= " pattern='{$p}'";
     return $attrs;
+  }
+}
+
+///
+// A FormField that is a password with some minimum criteria
+//
+class PasswordFormField extends PatternFormField {
+
+  function PasswordFormField ($name, $description, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'type' => 'password'
+      ,'pattern' => "/^(.{10,64})$/"
+      ,'minlength' => 10
+      ,'maxlength' => 64
+      ,'title' => "password"
+      ,'placeholder' => "10 To 64 letters, numbers or symbols"
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::PatternFormField($name, $description, $optional, $options);
+  }
+  
+  // Ditto for in an error message
+  function ErrorValue() {
+    // Don't reveal the "wrong" value
+    return '••••••••••••••••';
   }
 }
 
