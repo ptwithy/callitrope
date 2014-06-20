@@ -133,6 +133,10 @@ class Form {
   // Array of choices
   var $enums;
   
+  // For DatabaseForm, defaulted here for shared methods
+  var $editable = false;
+  var $recordID = NULL;
+  
   ///
   // Compute the choices for an enum field
   function choicesForField($field) {
@@ -833,8 +837,6 @@ class DatabaseForm extends Form {
   var $table;
   // If defined, makes the form editable
   var $idname;
-  var $editable = false;
-  var $recordID = NULL;
   // If defined will be updated with created and modified timestamps
   var $createdname;
   var $modifiedname;
