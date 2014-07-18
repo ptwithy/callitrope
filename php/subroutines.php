@@ -42,7 +42,11 @@
 //
 function format_mysqli_error($what=NULL, $mysqli=NULL) {
   global $db;
-  if ((! $mysqli) && $db) { $mysqli = $db; }
+  if ((! $mysqli) && $db) { 
+    $mysqli = (object) array(
+      "error" => mysql_error($db),
+      "errno" => mysql_errno($db));
+  }
   if ($what == NULL) {
     $what = "";
     if ($mysqli) { $what = "MySQL error: "; }
@@ -56,7 +60,11 @@ function format_mysqli_error($what=NULL, $mysqli=NULL) {
 function print_error_and_exit($what=NULL, $mysqli=NULL) {
     global $debugging, $db;
     echo "<p style='font-size: larger'>Error: Service Temporarily Unavailable. Please try again later.</p>";
-    if (! $mysqli) { $mysqli = $db; }
+    if ((! $mysqli)) { 
+      $mysqli = (object) array(
+        "connect_error" => mysql_error(),
+        "connect_errno" => mysql_errno());
+    }
     if (($what == NULL) && $mysqli) { $what = "MySQL error: "; }
     if ($debugging && $mysqli && $mysqli->connect_errno) {
         echo <<<QUOTE
@@ -324,7 +332,7 @@ function lookup_from_table($db, $table, $key, $value, $sort = "", $where = "") {
 // @param $table: the table
 function lookups_from_table_enums ($db, $table) {
   $selector = "SHOW COLUMNS FROM $table";
-  $query = $db->query($selector) or ode();
+  $query = $db->query($selector) or ode("lookups_from_table_enums");
   $array = array();
   while($row = $query->fetch_object()) {
     if(preg_match('/^(set|enum)/', $row->Type)) {
@@ -414,7 +422,7 @@ function menu_from_table($db, $table, $name, $key, $value, $select = "", $proper
 // Field, Type, Null, Key, Default, Extra
 function columns_of_table($db, $table) {
     $selector = "SHOW COLUMNS FROM $table";
-    $query = $db->query($selector) or ode();
+    $query = $db->query($selector) or ode("columns_of_table");
     $columns = array();
     while ($row = $query->fetch_object()) {
         $columns[$row->Field] = $row;
