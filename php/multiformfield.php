@@ -193,9 +193,7 @@ QUOTE;
   }  
 
   function TextForm($brief=false) {
-    $instance = is_null($this->instance) ? '' : " $this->instance";
-
-    $label = $brief ? "{$this->id}" : "{$this->description}{$instance}";
+    $label = $brief ? "{$this->id}" : "{$this->description}";
     $label = $this->addLabelColon($label);
     $result = "";
     $sep = $brief ? '; ' : "\n  ";

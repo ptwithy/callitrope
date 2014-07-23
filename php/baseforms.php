@@ -1133,6 +1133,7 @@ class FormField {
   var $name;
   // An English description of the field
   var $description;
+  var $descriptionDefault;
   // The type of the <input> element
   var $type;
   // A title for the <input>
@@ -1194,7 +1195,12 @@ class FormField {
     $this->options = $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
 
     $this->name = $name;
-    $this->description = ($description !== NULL) ? $description : ucwords(str_replace("_", " ", $name));
+    if ($description !== NULL) {
+      $this->description = $description;
+    } else {
+      $this->descriptionDefault = ucwords(str_replace("_", " ", $name));
+      $this->description = $this->descriptionDefault;
+    }
     $this->type = $options['type'];
     $this->required = (! $optional);
     $this->annotation = $options['annotation'];
@@ -1214,6 +1220,10 @@ class FormField {
     $this->instance = $instance;
     $instance = is_null($this->instance) ? '' : $this->instance;
     $this->id = "{$this->name}{$instance}";
+    / If description was defaulted, append the instance
+    if ($this->description == $this->descriptionDefault) {
+      $this->description = "{$this->description} {$instance}";
+    }
     $multiple = is_null($this->instance) ? '' : $this->instance; // Was '[]', but POST does not preserve order?
     $this->input = "{$this->name}{$multiple}";
   }
