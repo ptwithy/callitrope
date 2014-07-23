@@ -1944,7 +1944,11 @@ class ZIPFormField extends PatternFormField {
     $value = parent::canonical($value);
     $matches = array();
     if (preg_match($this->pattern, $value, $matches)) {
-      return $matches[1];
+      if (sizeof($matches) > 2) {
+        return $matches[1] . '-' . $matches[2];
+      } else {
+        return $matches[1];
+      }
     }
     return NULL;
   }
