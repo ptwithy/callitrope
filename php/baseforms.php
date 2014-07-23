@@ -1220,7 +1220,7 @@ class FormField {
     $this->instance = $instance;
     $instance = is_null($this->instance) ? '' : $this->instance;
     $this->id = "{$this->name}{$instance}";
-    / If description was defaulted, append the instance
+    // If description was defaulted, append the instance
     if ($this->description == $this->descriptionDefault) {
       $this->description = "{$this->description} {$instance}";
     }
