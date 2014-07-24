@@ -1198,7 +1198,7 @@ class FormField {
     if ($description !== NULL) {
       $this->description = $description;
     } else {
-      $this->descriptionDefault = ucwords(str_replace("_", " ", $name));
+      $this->descriptionDefault = mb_convert_case(str_replace("_", " ", $name), MB_CASE_TITLE, "UTF-8");
       $this->description = $this->descriptionDefault;
     }
     $this->type = $options['type'];
@@ -1218,11 +1218,18 @@ class FormField {
   
   function setInstance($instance=NULL) {
     $this->instance = $instance;
-    $instance = is_null($this->instance) ? '' : $this->instance;
-    $this->id = "{$this->name}{$instance}";
-    // If description was defaulted, append the instance
-    if ($this->description == $this->descriptionDefault) {
-      $this->description = "{$this->description} {$instance}";
+    if (is_null($this->instance)) {
+      $this->id = $this->name;
+      // If description was defaulted, append the instance
+      if (! is_null($this->descriptionDefault)) {
+        $this->description = "{$this->descriptionDefault}";
+      }
+    } else {
+      $this->id = "{$this->name}{$instance}";
+      // If description was defaulted, append the instance
+      if (! is_null($this->descriptionDefault)) {
+        $this->description = "{$this->descriptionDefault} {$instance}";
+      }
     }
     $multiple = is_null($this->instance) ? '' : $this->instance; // Was '[]', but POST does not preserve order?
     $this->input = "{$this->name}{$multiple}";
@@ -1456,8 +1463,9 @@ QUOTE;
 
   function HTMLTableColumn() {
     $classname = get_class($this);
+    $optional = (isset($this->optional) && $this->optional) ? 'true' : 'false';
     $element = <<<QUOTE
-      <!-- {$classname} {$this->name} {$this->instance} -->
+      <!-- {$classname}(`{$this->name}`, "{$this->description}", {$optional}) -->
 QUOTE;
     $element .= $this->HTMLFormElement();
     if ($this->readonly) {
@@ -1579,9 +1587,7 @@ QUOTE;
 
   // Creates a text description of this field, say, for an email
   function TextForm($brief=false) {
-    $instance = is_null($this->instance) ? '' : " {$this->instance}";
-
-    $label = $brief ? "{$this->id}" : "{$this->description}{$instance}";
+    $label = $brief ? "{$this->id}" : "{$this->description}";
     $label = $this->addLabelColon($label);
     return $label . " " . $this->TextValue();
   }
@@ -2292,9 +2298,7 @@ QUOTE;
 
   // Neil wants this value on a separate line
   function TextForm($brief=false) {
-    $instance = is_null($this->instance) ? '' : " {$this->instance}";
-
-    $text = $brief ? "{$this->id}" : "{$this->description}{$instance}";
+    $text = $brief ? "{$this->id}" : "{$this->description}";
     $text = $this->addLabelColon($text);
     if ($this->hasvalue()) {
       $text .= "\n\t" . $this->TextValue();
@@ -2739,9 +2743,7 @@ class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
 
   // Neil wants this value on a separate line
   function TextForm($brief=false) {
-    $instance = is_null($this->instance) ? '' : " {$this->instance}";
-
-    $text = $brief ? "{$this->id}" : "{$this->description}{$instance}";
+    $text = $brief ? "{$this->id}" : "{$this->description}";
     $text = $this->addLabelColon($text);
     if ($this->hasvalue()) {
       $text .= "\n" . $this->TextValue();
