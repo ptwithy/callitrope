@@ -38,91 +38,17 @@
 ///
 
 ///
-// Helper to format mysqli errors
-//
-function format_mysqli_error($what=NULL, $mysqli=NULL) {
-  global $db;
-  if ((! $mysqli) && $db) { 
-    $mysqli = (object) array(
-      "error" => mysql_error($db),
-      "errno" => mysql_errno($db));
-  }
-  if ($what == NULL) {
-    $what = "";
-    if ($mysqli) { $what = "MySQL error: "; }
-  }
-  return "{$what}{$mysqli->error} (#{$mysqli->errno})";
-}
-
-
-///
 // Helper function to report any errors
-function print_error_and_exit($what=NULL, $mysqli=NULL) {
-    global $debugging, $db;
+function print_error_and_exit () {
+    global $debugging;
     echo "<p style='font-size: larger'>Error: Service Temporarily Unavailable. Please try again later.</p>";
-    if ((! $mysqli)) { 
-      $mysqli = (object) array(
-        "connect_error" => mysql_error(),
-        "connect_errno" => mysql_errno());
-    }
-    if (($what == NULL) && $mysqli) { $what = "MySQL error: "; }
-    if ($debugging && $mysqli && $mysqli->connect_errno) {
-        echo <<<QUOTE
-        <p style='font-size: smaller'>"
-          [Additional information:
-            <span style='font-style: italic'>" . 
-              MySQL connect error: {$mysqli->connect_error} (#{$mysqli->connect_errno})
-            </span>]
-        </p>
-QUOTE;
+    if ($debugging) {
+        echo "<p style='font-size: smaller'>";
+        echo "[Additional information: <span style='font-style: italic'>" . mysql_error() . "</span>]";
+        echo "</p>";
     }
     exit;
 }
-
-///
-// Connect to a database
-function SQLConnect($parameters) {
-  global $debugging;
-  if (! ($mysqli = ($debugging ?
-    mysqli_connect($parameters['host'], $parameters['user'], $parameters['password'], $parameters['database']) :
-    @mysqli_connect($parameters['host'], $parameters['user'], $parameters['password'], $parameters['database']))
-    )) {
-    print_error_and_exit();
-  }
-  if ($debugging && $mysqli && $mysqli->connect_errno) {
-    echo <<<QUOTE
-      <p style='font-size: smaller'>"
-        [Additional information:
-        <span style='font-style: italic'>" . 
-          MySQL connect error: {$mysqli->connect_error} (#{$mysqli->connect_errno})
-        </span>]
-      </p>
-QUOTE;
-  } 
-  return $mysqli;
-}
-
-function SQLExecuteQuery($sql, $database) {
-  global $debugging;
-  if ($debugging > 2) {
-    echo "<p style='font-size: smaller'>";
-    echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
-    echo "</p>";
-  }
-  if (! $result = $database->query($sql)) {
-    if ($debugging) {
-      echo "<p style='font-size: smaller'>";
-      if ($debugging <= 2) {
-        echo "[Query: <span style='font-style: italic'>" . $sql . "</span>]";
-        echo "<br>";
-      }
-      echo "[Error: <span style='font-style: italic'>{$database->error} (#{$database->errno})</span>]";
-      echo "</p>";
-    }
-  }
-  return $result;
-}
-
 
 ///
 // Validate an email address
@@ -132,10 +58,7 @@ function SQLExecuteQuery($sql, $database) {
 // records
 function is_email_valid($email, $dns=FALSE) {
     // Match address against reasonable pattern
-    // C.f., http://www.w3.org/TR/html5/forms.html#e-mail-state-(type=email)
-    // Although I added a + to the last subgroup, to require at least one `.`
-    // in the domain part
-    if (preg_match('/^[a-zA-Z0-9.!#$%&\'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/',
+    if (preg_match('/^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,})$/i',
                    $email)) {
         // Ignore these bozos
         if ($email == "sample@email.tst") return FALSE;
@@ -201,7 +124,7 @@ function h2s($what) {
 // remove spaces with trim and escape inner quotes with h2s
 //
 function clean($str) {
-  return h2s(trim($str));
+	return h2s(trim($str));
 }
 
 ///
@@ -233,9 +156,9 @@ function u2h($what) {
 
 ///
 // Used to display SQL errors
-// e.g., 'mysqli->query(...) or ode();'
-function ode($what=NULL, $mysqli=NULL) {
-  die(format_mysqli_error($what, $mysqli));
+// e.g., 'mysql_query(...) or ode();'
+function ode() {
+    die("Error #". mysql_errno() . ": " . mysql_error());
 }
 
 ///
@@ -315,13 +238,12 @@ function lookup_from_table($db, $table, $key, $value, $sort = "", $where = "") {
     if (! empty($where)) {
         $selector .= " WHERE $where";
     }
-    $selector .= " ORDER BY $sort";
-    $query = $db->query($selector) or ode();
+    $selector .= " ORDER BY $sort ASC";
+    $query = mysql_query($selector, $db) or ode();
     $array = array();
-    while ($object = $query->fetch_object()) {
+    while ($object = mysql_fetch_object($query)) {
         $array[$object->key] = $object->value;
     }
-    $query->close();
     return $array;
 }
 
@@ -331,27 +253,27 @@ function lookup_from_table($db, $table, $key, $value, $sort = "", $where = "") {
 // @param $db: the database
 // @param $table: the table
 function lookups_from_table_enums ($db, $table) {
-  $selector = "SHOW COLUMNS FROM $table";
-  $query = $db->query($selector) or ode("lookups_from_table_enums");
-  $array = array();
-  while($row = $query->fetch_object()) {
-    if(preg_match('/^(set|enum)/', $row->Type)) {
-      // enums start at 1, 0 is an invalid entry
-      $start = preg_match('/^set/', $row->Type) ? 0 : 1;
-      $keys = eval(preg_replace('/^(set|enum)/', 'return array', $row->Type).';');
-      $map = array();
-      // If NULL is allowed for an enum, make the first map entry empty
-      if(($start == 1) && ($row->Null == 'YES')) {
-        $map[''] = NULL;
-      }
-      foreach ($keys as $index => $name) {
-        $map[$name] = $index + $start;
-      }
-      $array[$row->Field] = $map;
-    }
-  }
-  $query->close();
-  return $array;
+	$selector = "SHOW COLUMNS FROM $table";
+    $query = mysql_query($selector, $db) or ode();
+	$array = array();
+	
+	while($row = mysql_fetch_object($query)) {
+ 		if(ereg('set|enum', $row->Type)) {
+			// enums start at 1, 0 is an invalid entry
+ 		  $start = ereg('set', $row->Type) ? 0 : 1;
+			$keys = eval(ereg_replace('set|enum', 'return array', $row->Type).';');
+			$map = array();
+			// If NULL is allowed, make the first map entry empty
+			if($row->Null == 'YES') {
+				$map[''] = NULL;
+			}
+			foreach ($keys as $index => $name) {
+				$map[$name] = $index + $start;
+			}
+			$array[$row->Field] = $map;
+	 	}
+	}
+	return $array;
 }
 
 ///
@@ -374,11 +296,11 @@ function menu_from_array($name, $array, $select = "", $properties = "", $bitch=f
     $html = "<select name=\"$name\" $properties>";
     if ($bitch) {
       if (is_array($select)) {
-        $bitch = array_count_values($select) !=
-          array_count_values(array_intersect($select, $array));
+      	$bitch = array_count_values($select) !=
+      		array_count_values(array_intersect($select, $array));
       } else {
         // Use array_keys because the key in a map might be NULL!
-        $bitch = (! array_count_values(array_keys($array, $select)));
+      	$bitch = (! array_count_values(array_keys($array, $select)));
       }
      }
     foreach ($array as $this_key => $this_value) {
@@ -392,7 +314,7 @@ function menu_from_array($name, $array, $select = "", $properties = "", $bitch=f
         $html .= "\n  <option value=\"$v\" $s>$k</option>";
     }
     if ($bitch) {
-      $html .= "\n  <option value=\"$select\" selected>***INVALID***</option>";
+    	$html .= "\n  <option value=\"$select\" selected>***INVALID***</option>";
     }
     $html .= "\n</select>\n";
 
@@ -422,12 +344,11 @@ function menu_from_table($db, $table, $name, $key, $value, $select = "", $proper
 // Field, Type, Null, Key, Default, Extra
 function columns_of_table($db, $table) {
     $selector = "SHOW COLUMNS FROM $table";
-    $query = $db->query($selector) or ode("columns_of_table");
+    $query = mysql_query($selector, $db) or ode();
     $columns = array();
-    while ($row = $query->fetch_object()) {
-        $columns[$row->Field] = $row;
+    while ($row = mysql_fetch_object($query)) {
+        $columns[$row->field] = $row;
     }
-    $query->close();
     return $columns;
 }
 
@@ -606,14 +527,14 @@ function cp1252_to_unicode($str) {
 function validate_date($date, $minyear = 0, $maxyear = 9999) {
     // echo "validate_date passed date= $date";
 
-    if ((preg_match ("/([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})/", $date, $regs)) or
-        (preg_match ("/([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})/", $date, $regs))){
+    if ((ereg ("([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})", $date, $regs)) or
+        (ereg ("([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})", $date, $regs))){
 
         list($wholeyear, $year,$month,$day) = $regs;
 
     }
-    elseif((preg_match ("/([0-9]{1,2})-([0-9]{1,2})-([0-9]{4})/", $date, $regs)) or
-           (preg_match ("/([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})/", $date, $regs))){
+    elseif((ereg ("([0-9]{1,2})-([0-9]{1,2})-([0-9]{4})", $date, $regs)) or
+           (ereg ("([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})", $date, $regs))){
 
         list($wholeyear,$month,$day,$year) = $regs;
     }
@@ -631,7 +552,7 @@ function validate_date($date, $minyear = 0, $maxyear = 9999) {
         return false;
     }
     elseif ($year < $minyear || $year > $maxyear) {
-      return false;
+    	return false;
     }
     //      print $regs[0];
     return true;
@@ -665,7 +586,6 @@ function pw_encode($password) {
     return hmac($seed, $password, 'md5', 64) . $seed;
 }
 
-
 ///
 // Check a password against the stored value
 //
@@ -684,7 +604,7 @@ function pw_check($password, $stored_value) {
 // @param int lifetime: number of seconds to live, defaults to forever
 // @param string path: defaults to /
 // @param string domain: defaults to whole domain
-// @param bool secure: defaults to true for HTTPS, otherwise false
+// @param bool secure: defaults to false
 // @param bool httponly: defaults to true
 function ptw_session_start($expires=null, $path=null, $domain=null, $secure=null, $httponly=null) {
     $name = "PHPSESSID";
@@ -702,7 +622,7 @@ function ptw_session_start($expires=null, $path=null, $domain=null, $secure=null
                              preg_replace('/:[0-9]*$/', '', $_SERVER['HTTP_HOST'])));
     }
     if (is_null($secure)) {
-        $secure = array_key_exists('HTTPS', $_SERVER);
+        $secure = false;
     }
     if (is_null($httponly)) {
         $httponly = true;
@@ -715,32 +635,6 @@ function ptw_session_start($expires=null, $path=null, $domain=null, $secure=null
         session_id($_COOKIE[$name]);
     }
     session_start();
-}
-
-///
-// Useful session ender
-//
-// Ensures session variables cleared, cookie cleared, session destroyed.
-function ptw_session_destroy() {
-  session_start();
-	$sessionName = session_name();
-	$sessionCookie = session_get_cookie_params();
-  // Unset all of the session variables.
-  $_SESSION = array();
-  // Clear the session cookie
-  // Note cookie parameters must match exactly, other than setting the
-  // content to the empty string, and the lifetime to the past
-	setcookie(
-	  $sessionName,
-	  '',
-	  time() - 3600,
-	  $sessionCookie['path'],
-	  $sessionCookie['domain'],
-	  $sessionCookie['secure'],
-	  $sessionCookie['httponly']
-	);
-  // Finally, destroy the session.
-  session_destroy();
 }
 
 ///

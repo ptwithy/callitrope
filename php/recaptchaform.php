@@ -38,15 +38,10 @@ class ReCaptchaFormField extends FormField {
   var $publickey;
   var $error = null;
 
-  function ReCaptchaFormField($name, $description, $mykeys, $options=NULL) {
-    // default options
-    $defaultoptions = array(
-      // Highest priority element, so it is only checked when everything else
-      // is correct
-      ,'priority' => PHP_INT_MAX
-    );
-    $this->options = $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::FormField($name, $description, false, $options);
+  function ReCaptchaFormField($name, $description, $mykeys) {
+    // Highest priority element, so it is only checked when everything else
+    // is correct
+    parent::FormField($name, $description, false, "", NULL, PHP_INT_MAX);
     $this->value = false;
     $this->valid = false;
     $this->publickey = $mykeys['publickey'];
