@@ -58,6 +58,16 @@ $mobile = preg_match("/ipad|iphone|android/i",  $_SERVER['HTTP_USER_AGENT']);
 function is_field ($f) { return $f instanceof FormField; };
 function order ($a, $b) { return $a->priority - $b->priority; };
 
+function addLabelColon($label) {
+  // Add a trailing colon if no punctuation already
+  if (preg_match("/.*[\w\d)\]]$/", $label)) { $label .= ':'; }
+  return $label;
+}
+
+function underscoreToTitleCase($name) {
+  return mb_convert_case(str_replace("_", " ", $name), MB_CASE_TITLE, "UTF-8");
+}
+
 class FieldSpec {
   var $id;
   var $name;
@@ -739,19 +749,34 @@ QUOTE;
 
   // Returns a string representing the text version of the form
   //
-  // @param $brief:boolean if true, use the field name rather than
+  // @param $brief:oneof(false, 'pretty', true)
+  //   false:  Print all descriptions and all fields
+  //   'pretty':  Print descriptions and fields with value
+  //   true:  Print compact format, field name and only fields with value  
   // description as the label
   // @param $section:string Restrict to the specified section, otherwise
   // all sections
   function TextForm($brief=false, $section=null) {
     $text = "";
-    $fields = $section ? $this->sections[$section] : $this->fields;
-    foreach ($fields as $field) {
-      if ($field instanceof FormField &&
-          ((! $brief) || $field->hasvalue())) {
-        // Neil wants double-spacing between fields
+    $sections = $section ? array($section => $this->sections[$section]) : $this->sections;
+    foreach ($sections as $name => $fields) {
+      $sectext = "";
+      foreach ($fields as $field) {
+        if (($field instanceof FormField) &&
+            (($brief === false) || $field->hasvalue())) {
+          // Neil wants double-spacing between fields
+          if ($sectext != "") { $sectext .= "\n\n"; }
+          $sectext .= $field->TextForm($brief);
+        }
+      }
+      if (($brief === false) || $sectext) {
         if ($text != "") { $text .= "\n\n"; }
-        $text .= $field->TextForm($brief);
+        $label = underscoreToTitleCase($name);
+        $label = addLabelColon($label);
+        $text .= $label;
+        // dashes?
+        if ($text != "") { $text .= "\n\n"; }
+        $text .= $sectext;
       }
     }
     return $text;
@@ -1198,7 +1223,7 @@ class FormField {
     if ($description !== NULL) {
       $this->description = $description;
     } else {
-      $this->descriptionDefault = mb_convert_case(str_replace("_", " ", $name), MB_CASE_TITLE, "UTF-8");
+      $this->descriptionDefault = underscoreToTitleCase($name);
       $this->description = $this->descriptionDefault;
     }
     $this->type = $options['type'];
@@ -1586,8 +1611,12 @@ QUOTE;
   }
 
   // Creates a text description of this field, say, for an email
+  // @param $brief:oneof(false, 'pretty', true)
+  //   false:  Print descriptions and all fields
+  //   'pretty':  Print descriptions and fields with value
+  //   true:  Print compact format, field name and only fields with value  
   function TextForm($brief=false) {
-    $label = $brief ? "{$this->id}" : "{$this->description}";
+    $label = ($brief === true) ? "{$this->id}" : "{$this->description}";
     $label = $this->addLabelColon($label);
     return $label . " " . $this->TextValue();
   }
@@ -2298,7 +2327,7 @@ QUOTE;
 
   // Neil wants this value on a separate line
   function TextForm($brief=false) {
-    $text = $brief ? "{$this->id}" : "{$this->description}";
+    $text = ($brief === true) ? "{$this->id}" : "{$this->description}";
     $text = $this->addLabelColon($text);
     if ($this->hasvalue()) {
       $text .= "\n\t" . $this->TextValue();
@@ -2743,7 +2772,7 @@ class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
 
   // Neil wants this value on a separate line
   function TextForm($brief=false) {
-    $text = $brief ? "{$this->id}" : "{$this->description}";
+    $text = ($brief === true) ? "{$this->id}" : "{$this->description}";
     $text = $this->addLabelColon($text);
     if ($this->hasvalue()) {
       $text .= "\n" . $this->TextValue();
