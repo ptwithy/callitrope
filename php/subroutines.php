@@ -441,17 +441,22 @@ function number_pad($number,$n) {
 // Converts a time with AM/PM to 24 hour time
 function normalize_time($time) {
     if (empty($time)) { return $time; }
-    if (preg_match("/(\d*)\:?(\d*)\s*([ap]?).*/i", $time, $regs)) {
+    if (preg_match("/(\d*)\:?(\d*)\:?(\d*)\s*([ap]?).*/i", $time, $regs)) {
         // $regs[0] is the full match
         if (! $regs[2]) {
             $regs[2] = 0;
         }
-        // 12am == 00:00, 12pm == 12:00
-        $regs[1] = $regs[1] % 12;
-        if ($regs[3] == 'p' || $regs[3] == 'P') {
-            $regs[1] = $regs[1] + 12;
+        if (! $regs[3]) {
+            $regs[3] = 0;
         }
-        return "{$regs[1]}:{$regs[2]}";
+        if ($regs[4]) {
+          // 12am == 00:00, 12pm == 12:00
+          $regs[1] = $regs[1] % 12;
+          if ($regs[4] == 'p' || $regs[4] == 'P') {
+              $regs[1] = $regs[1] + 12;
+          }
+        }
+        return sprintf("%02d:%02d:%02d", $regs[1], $regs[2], $regs[3]);
     }
     return $time;
 }
