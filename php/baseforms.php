@@ -440,6 +440,12 @@ class Form {
     }  
   }
 
+  // Get the section list, ensuring it is finished first
+  function getSections() {
+    $this->finishSection();
+    return $this->sections;
+  }
+  
   // Takes a string that will be inserted into the table as a footer
   function finishSection($footer='') {
     if (! empty($footer)) {
@@ -616,11 +622,9 @@ QUOTE;
   // Returns a string representing the HTML version of the form table
   // Override this to build multiple tables with different layouts
   function HTMLFormTable() {
-    // Ensure finished
-    $this->finishSection();
     $element = $this->usedivs ? "div" : "table";
     $html = "";
-    foreach ($this->sections as $name => $fields) {
+    foreach ($this->getSections() as $name => $fields) {
       $html .=
 <<<QUOTE
 
@@ -656,7 +660,7 @@ QUOTE;
   // all sections
   function hasValue($section=null) {
     $value = false;
-    $fields = $section ? $this->sections[$section] : $this->fields;
+    $fields = $section ? $this->getSections()[$section] : $this->fields;
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
         $value |= $field->hasvalue();
@@ -672,7 +676,7 @@ QUOTE;
   function SQLForm($section=null, $fields=null) {
     $sql = "";
     if (! $fields) {
-      $fields = $section ? $this->sections[$section] : $this->fields;
+      $fields = $section ? $this->getSections()[$section] : $this->fields;
     }
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
@@ -692,7 +696,7 @@ QUOTE;
   function SQLTable($section=null, $fields=null) {
     $sql = "";
     if (! $fields) {
-      $fields = $section ? $this->sections[$section] : $this->fields;
+      $fields = $section ? $this->getSections()[$section] : $this->fields;
     }
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
@@ -714,7 +718,7 @@ QUOTE;
   function SQLValues($section=null, $fields=null) {
     $sql = "";
     if (! $fields) {
-      $fields = $section ? $this->sections[$section] : $this->fields;
+      $fields = $section ? $this->getSections()[$section] : $this->fields;
     }
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
@@ -737,7 +741,7 @@ QUOTE;
   function SQLFields($section=null, $fields=null) {
     $sql = "";
     if (! isset($fields)) {
-      $fields = isset($section) ? $this->sections[$section] : $this->fields;
+      $fields = isset($section) ? $this->getSections()[$section] : $this->fields;
     }
     foreach ($fields as $field) {
       if ($field instanceof FormField) {
@@ -758,7 +762,7 @@ QUOTE;
   // all sections
   function TextForm($brief=false, $section=null) {
     $text = "";
-    $sections = $section ? array($section => $this->sections[$section]) : $this->sections;
+    $sections = $section ? array($section => $this->getSections()[$section]) : $this->getSections();
     foreach ($sections as $name => $fields) {
       $sectext = "";
       foreach ($fields as $field) {
