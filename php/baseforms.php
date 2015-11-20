@@ -68,6 +68,11 @@ function underscoreToTitleCase($name) {
   return mb_convert_case(str_replace("_", " ", $name), MB_CASE_TITLE, "UTF-8");
 }
 
+// empty considered harmful, because it treats 0 and 0.0 as empty!
+function isBlank($value) {
+  return (empty($value) && (! is_numeric($value)));
+}
+
 class FieldSpec {
   var $id;
   var $name;
@@ -1293,7 +1298,7 @@ class FormField {
 
   // Tests if a value is valid for this field
   function isvalid($value) {
-    if (empty($value)) {
+    if (isBlank($value)) {
       return (! $this->required);
     } else if ($this->allowURI) {
       return true;
@@ -1313,7 +1318,7 @@ class FormField {
 
   // Creates an error message telling how to correct your errors.
   function errorMessage() {
-    if (empty($this->value) && $this->required) {
+    if (isBlank($this->value) && $this->required) {
       return "{$this->description} is a required field. Please enter it below.";
     } else {
       $title = isset($this->title) ? $this->title : "entry";
@@ -1342,7 +1347,7 @@ class FormField {
     // If the value is valid, store it
     if ($this->isvalid($v)) {
       // Allow erasing of non-required values
-      if ((! $this->required) && empty($v)) {
+      if ((! $this->required) && isBlank($v)) {
         $this->value = NULL;
       } else {
         $this->value = $this->canonical($v);
@@ -1648,7 +1653,7 @@ class EmailFormField extends FormField {
   }
 
   function isvalid($value) {
-    if ((! $this->required) && empty($value)) {
+    if ((! $this->required) && isBlank($value)) {
       return true;
     } else {
       return parent::isvalid($value) && is_email_valid($value);
@@ -1713,7 +1718,7 @@ class SimpleNumberFormField extends FormField {
   }
 
   function isvalid ($value) {
-    if ((! $this->required) && empty($value)) {
+    if ((! $this->required) && isBlank($value)) {
       return true;
     } else {
       return parent::isvalid($value) &&
@@ -1796,7 +1801,7 @@ abstract class PatternFormField extends FormField {
   }
 
   function isvalid ($value) {
-    if ((! $this->required) && empty($value)) {
+    if ((! $this->required) && isBlank($value)) {
       return true;
     } else {
       return parent::isvalid($value) &&
@@ -1915,7 +1920,7 @@ class CountryFormField extends StateFormField {
 
   // For this particular field, we heuristicate before we validate
   function isvalid ($value) {
-    if ((! $this->required) && empty($value)) {
+    if ((! $this->required) && isBlank($value)) {
       return true;
     } else {
       return parent::isvalid($this->heuristicate($value));
@@ -1927,7 +1932,7 @@ class CountryFormField extends StateFormField {
   }
   
   function heuristicate($value) {
-    if (empty($value)) { return $value; }
+    if (isBlank($value)) { return $value; }
     global $ISO_3166_1_countries;
     include "ISO-3166-1.php";
 
@@ -2058,7 +2063,7 @@ class PhoneFormField extends PatternFormField {
   }
 
   function isvalid ($value) {
-    if ((! $this->required) && empty($value)) {
+    if ((! $this->required) && isBlank($value)) {
       return true;
     } else {
       if (preg_match($this->usPattern, $value)) {
@@ -2145,7 +2150,7 @@ class DateFormField extends PatternFormField {
   }
 
   function isvalid ($value) {
-    if ((! $this->required) && empty($value)) {
+    if ((! $this->required) && isBlank($value)) {
       return true;
     } else {
       return preg_match($this->ISOPattern, $value) || preg_match($this->LocalPattern, $value);
@@ -2157,7 +2162,7 @@ class DateFormField extends PatternFormField {
   }
   
   function choice () {
-    if ((! empty($this->value)) && $this->isvalid($this->value)) {
+    if ((! isBlank($this->value)) && $this->isvalid($this->value)) {
       if ($this->ISO) {
         return $this->ISOValue();
       } else {
@@ -2251,7 +2256,7 @@ class DaytimeFormField extends PatternFormField {
   }
 
   function isvalid ($value) {
-    if ((! $this->required) && empty($value)) {
+    if ((! $this->required) && isBlank($value)) {
       return true;
     } else {
       // We want ISO format always, heuristicate Local if necessary
@@ -2452,7 +2457,7 @@ class SimpleChoiceFormField extends FormField {
   function isvalid($key) {
     if (! $this->required) {
       return true;
-    } else if (! (is_int($key) || is_string($key))) {
+    } else if (isBlank($key)) {
       return false;
     } else {
       // Can't check isset, because we want to allow null as a possible
@@ -2463,7 +2468,7 @@ class SimpleChoiceFormField extends FormField {
 
   function canonical($key) {
     if ((! $this->required) &&
-        (($key == $this->invalidChoice) || empty($key))) {
+        (($key == $this->invalidChoice) || isBlank($key))) {
       return NULL;
     }
     // The canonical value needs to be `===` to the array key
@@ -2476,7 +2481,7 @@ class SimpleChoiceFormField extends FormField {
   // We have to be a little more particular here
   function hasvalue() {
     return $this->valid
-      && (is_int($this->value) || is_string($this->value));
+      && (! isBlank($this->value));
   }
 
   function choice() {
