@@ -103,7 +103,8 @@ QUOTE;
   
   function contentAccess() {
     global $debugging;
-    if (is_readable($this->filepath($this->value))) {
+    $fp = $this->filepath($this->value);
+    if ((! empty($fp)) && @is_readable($fp)) {
       return 'file';
     } else {
       return NULL;
