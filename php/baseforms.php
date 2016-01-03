@@ -172,6 +172,9 @@ class Form {
   // Ordering is important
   var $sqlTypeMap = array (
     'text' => 'area'
+    // This is how mysql represents boolean
+    ,'tinyint(1)' => 'boolean'
+    ,'bool' => 'boolean'
     ,'int' => 'number'
     ,'decimal' => 'number'
     ,'datetime' => 'datetime'
@@ -274,6 +277,8 @@ class Form {
       case "area":
       case "textarea":
         return new TextAreaFormField($name, $description, $optional, $options);
+      case "boolean":
+        return new SimpleBooleanFormField($name, $description, true, $options);
       case "button":
       case "radio":
       case "radiobutton":
@@ -2425,11 +2430,12 @@ class SimpleChoiceFormField extends FormField {
       // Back-compatibility, $options used to be $annotation
       'annotation' => is_string($options) ? $options : ''
       ,'choices' => NULL
+      ,'invalidChoice' => MD5('not_bloody_likely')
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
     parent::FormField($name, $description, $optional, $options);
     $this->choices = $options['choices'];
-    $this->invalidChoice = MD5('not_bloody_likely');
+    $this->invalidChoice = $options['invalidChoice'];
   }
   
   function setForm($form) {
@@ -2876,6 +2882,43 @@ QUOTE;
 
     return $element;
   }
+}
+
+// Boolean form field is a riff on that
+// We display it as a single check box that is checked or not
+// And whose value is 1 or DEFAULT (which must be 0 in the database)
+// Represented in mySQL as tinyint(1)
+class SimpleBooleanFormField extends SimpleCheckboxFormField {
+
+  function SimpleBooleanFormField($name, $description, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'choices' => array(1 => 'Yes')
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::SimpleCheckboxFormField($name, $description, true, $options);
+  }
+  
+  function setForm($form) {
+    parent::setForm($form);
+    // Even though the DB says it is non-nullable, we don't want this required, as the
+    // implicit default is for the unchecked case.
+    $this->required = false;
+  }
+  
+  function TextValue() {
+    if ($this->hasvalue()) {
+      return $this->choice();
+    } else {
+      return 'No';
+    }
+  }
+  
+  function SQLType() {
+    return "BOOLEAN";
+  }  
 }
 
 ///
