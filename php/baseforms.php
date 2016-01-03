@@ -3113,7 +3113,15 @@ class SimpleMenuItemFormField extends SimpleMenuFormField {
   function HTMLFormElement() {
     // Higlight incorrect values
     $class = ($this->form->validate && (! $this->valid)) ? ' class="invalid"' : '';
-    $element =
+    $element = '';
+    // Debugging
+    if ($debugging > 2) {
+      $element .= "<div>valid: " . ($this->valid ? "true" : "false") . "</div>";
+      $element .= "<div>choices keys: " . implode(",", array_keys($this->choices)) . "</div>";
+      $element .= "<div>choices values: " . implode(",", $this->choices) . "</div>";
+      $element .= "<div>value: {$this->value}</div>";
+    }
+    $element .=
 <<<QUOTE
 
       <select{$class} name="{$this->input}" id="{$this->id}">

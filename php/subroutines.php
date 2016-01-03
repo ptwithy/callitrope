@@ -316,7 +316,7 @@ function lookup_from_table($db, $table, $key, $value, $sort = "", $where = "") {
         $selector .= " WHERE $where";
     }
     $selector .= " ORDER BY $sort";
-    $query = $db->query($selector) or ode();
+    $query = $db->query($selector) or ode('lookup_from_table', $db);
     $array = array();
     while ($object = $query->fetch_object()) {
         $array[$object->key] = $object->value;
@@ -332,7 +332,7 @@ function lookup_from_table($db, $table, $key, $value, $sort = "", $where = "") {
 // @param $table: the table
 function lookups_from_table_enums ($db, $table) {
   $selector = "SHOW COLUMNS FROM $table";
-  $query = $db->query($selector) or ode("lookups_from_table_enums");
+  $query = $db->query($selector) or ode('lookups_from_table_enums', $db);
   $array = array();
   while($row = $query->fetch_object()) {
     if(preg_match('/^(set|enum)/', $row->Type)) {
@@ -422,7 +422,7 @@ function menu_from_table($db, $table, $name, $key, $value, $select = "", $proper
 // Field, Type, Null, Key, Default, Extra
 function columns_of_table($db, $table) {
     $selector = "SHOW COLUMNS FROM $table";
-    $query = $db->query($selector) or ode("columns_of_table");
+    $query = $db->query($selector) or ode('columns_of_table', $db);
     $columns = array();
     while ($row = $query->fetch_object()) {
         $columns[$row->Field] = $row;
