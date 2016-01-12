@@ -719,7 +719,9 @@ function ptw_session_start($expires=null, $path=null, $domain=null, $secure=null
     if (array_key_exists($name, $_COOKIE)) {
         session_id($_COOKIE[$name]);
     }
-    session_start();
+    if (session_status() == PHP_SESSION_NONE) {
+      session_start();
+    }
 }
 
 ///
