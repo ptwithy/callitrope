@@ -177,9 +177,10 @@ class Form {
     ,'bool' => 'boolean'
     ,'int' => 'number'
     ,'decimal' => 'number'
-    ,'datetime' => 'datetime'
     // SQL date fields should require full year
     ,'date' => 'birthdate'
+    // MUST COME SECOND or stristr("date") will match it
+    ,'datetime' => 'datetime'
     ,'time' => 'time'
     ,'blob' => 'image'
   );
@@ -193,7 +194,7 @@ class Form {
     $optional = $fieldspec->optional;
     $options = $fieldspec->options;
     
-    $namemap = array("email", "password", "number", "choice", "state", "region", "zip", "postal", "country", "phone", "cell", "birth", "date", "daytime", "time", "file", "image", "picture");
+    $namemap = array("email", "password", "number", "choice", "state", "region", "zip", "postal", "country", "phone", "cell", "birth", "dob", "date", "daytime", "time", "year", "file", "image", "picture");
     if ($type == null) {
       foreach ($namemap as $n) {
         if (stristr($name, $n)) {
@@ -204,7 +205,7 @@ class Form {
     }
     
     // Compute id from name and instance
-    if ($type == null) {
+    if ($type === null) {
       $e = $this->choicesForField($id);
       if (is_array($e)) {
         if ($debugging > 2) {
@@ -261,10 +262,13 @@ class Form {
         return new PhoneFormField($name, $description, $optional, $options);
       case "internationalphone":
         return new InternationalPhoneFormField($name, $description, $optional, $options);
+      case "year":
+        return new YearFormField($name, $description, $optional, $options);
       case "date":
         return new DateFormField($name, $description, $optional, $options);
       case "birth":
       case "birthdate":
+      case "dob":
         return new BirthdateFormField($name, $description, $optional, $options);
       case "daytime":
       case "time":
@@ -299,6 +303,9 @@ class Form {
         return new ImageFormField($name, $description, $optional, $options);
 
       default:
+        if (! empty($type)) {
+          echo "$id: unknown type heuristic `{$type}`";
+        }
         return new FormField($name, $description, $optional, $options);
     }
   }
@@ -2120,6 +2127,80 @@ class InternationalPhoneFormField extends PhoneFormField {
       return parent::canonical("+1 {$value}");
     }
   }
+}
+
+///
+// A FormField that is a year
+//
+// Allows a 2-digit year if non-ISO mode, defaults to the current century
+//
+// Heuristicates input/ouput format, stores in ISO format
+//
+class YearFormField extends PatternFormField {
+  var $ISO;
+  var $ISOPattern = "/^([0-9]{4,4})$/";
+  var $LocalPattern = "/^((?:[0-9]{2,2})?[0-9]{2,2})$/";
+  var $year;
+
+  function YearFormField ($name, $description, $optional=false, $options=NULL) {
+    global $mobile;
+    $this->ISO = $mobile;
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'type' => "text"
+      ,'maxlength' => 4
+      // We want ISO format always, heuristicate Local if necessary
+      ,'pattern' => $this->ISOPattern
+      ,'title' => "year"
+      ,'placeholder' => date("Y")
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::PatternFormField($name, $description, $optional, $options);
+  }
+
+  function isvalid ($value) {
+    if ((! $this->required) && isBlank($value)) {
+      return true;
+    } else {
+      return preg_match($this->ISOPattern, $value) || preg_match($this->LocalPattern, $value);
+    }
+  }
+
+  function ISOValue () {
+    return ($this->year);
+  }
+  
+  function choice () {
+    if ((! isBlank($this->value)) && $this->isvalid($this->value)) {
+      return $this->ISOValue();
+    } else {
+      return $this->value;
+    }
+  }
+  
+  function canonical ($value) {
+    $value = parent::canonical($value);
+    if (preg_match($this->ISOPattern, $value, $matches)) {
+      $this->year = 1 * $matches[1];
+    } else if (preg_match($this->LocalPattern, $value, $matches)) {
+      $this->year = 1 * $matches[1];
+      if ($this->year < 100) {
+        $date = getdate();
+        $century = floor(($date['year']) / 100);
+        $this->year = $century * 100 + $this->year;
+      }
+    } else {
+      // Because we are called by isvalid
+      return $value;
+    }
+    // Not choice because we don't know if it is valid yet.
+    return $this->ISOValue();
+  }
+  
+  function SQLType() {
+    return "DECIMAL(4)";
+  }  
 }
 
 ///
