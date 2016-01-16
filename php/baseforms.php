@@ -2523,8 +2523,18 @@ class SimpleChoiceFormField extends FormField {
     parent::setForm($form);
     if ($this->choices == null) {
       if (isset($this->options['relatedtable'])) {
-        $related = $this->options['relatedtable'];
-        $this->choices = lookup_from_table($form->database, $related['name'], $related['key'], $related['value'], $related['sort']);
+        $related = array_merge(
+          array('sort' => '', 'where' => ''),
+          $this->options['relatedtable']
+        );
+        $this->choices = lookup_from_table(
+          $form->database,
+          $related['name'],
+          $related['key'],
+          $related['value'],
+          $related['sort'],
+          $related['where']
+        );
       } else {
         $this->choices = $form->choicesForField($this->id);
       }
