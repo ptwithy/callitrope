@@ -116,6 +116,15 @@ function field($name, $description=null, $type=null, $options=null) {
 function optField($name, $description=null, $type=null, $options=null) {
   return new FieldSpec($name, $description, $type, true, $options);
 }
+///
+// Create a computed field
+//
+function calcField($name, $description=null, $type=null, $calculation, $options=null) {
+  // Computed field must be read-only
+  $override = array('readonly' => true, 'calculation' => $calculation);
+  $options = $options ? array_merge($options, $override) : $override;
+  return new FieldSpec($name, $description, $type, true, $options);
+}
 
   
 ///
@@ -1215,6 +1224,8 @@ class FormField {
   var $options;
   // By default, we do not allow URI's in fields -- they smell like spam
   var $allowURI = false;
+  // SQL calculation for calculated field
+  var $calculation = NULL;
 
   // Create a form field.  Arguments are:
   // @param name:String The name of the field
@@ -1237,6 +1248,7 @@ class FormField {
       ,'maxlength' => NULL
       ,'default' => NULL
       ,'allowURI' => false
+      ,'calculation' => NULL
     );
     $this->options = $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
 
@@ -1257,6 +1269,7 @@ class FormField {
     $this->maxlength = $options['maxlength'];
     $this->default = $options['default'];
     $this->allowURI = $options['allowURI'];
+    $this->calculation = $options['calculation'];
     $this->valid = true;
     $this->priority = $options['priority'];
     $this->setInstance($options['instance']);
@@ -1475,31 +1488,33 @@ class FormField {
   function HTMLFormElement() {
     global $html5;
     // If there is a value, display that, otherwise display the default
-    // Higlight incorrect values, lowlight defaults
-    $class= "";
+    // Highlight incorrect values, lowlight defaults
+    $baseclass = $this->readonly ? "readonly" : "";
+    $classes = $baseclass;
     $onfocus = "";
     $additional = $this->additionalInputAttributes();
     if (isset($this->value)) {
       $val = $this->HTMLValue();
       // Only set invalid class when displaying errors
       if ($this->form->validate && (! $this->valid)) {
-        $class = ' class="invalid"';
+        $classes = trim("{$baseclass} invalid");
         $onfocus =
 <<<QUOTE
-          onfocus="this.className = '';"
+          onfocus="this.className = '{$baseclass}';"
 QUOTE;
       }
     } else if (isset($this->default)) {
       $val = $this->default;
       $val = htmlentities($val, ENT_QUOTES, "UTF-8");
-      $class = ' class="hint"';
+      $classes = trim("{$baseclass} hint");
       $onfocus =
 <<<QUOTE
-        onfocus="this.className = ''; this.value = '';"
+        onfocus="this.className = '{$baseclass}'; this.value = '';"
 QUOTE;
     } else {
       $val = '';
     }
+    $class = $classes ? " class='{$classes}'" : "";
     return
 <<<QUOTE
 
@@ -1515,7 +1530,7 @@ QUOTE;
 QUOTE;
     $element .= $this->HTMLFormElement();
     if ($this->readonly) {
-      // We still need to submit the value
+      // We still need to submit the value, for the parser, etc.
       $element .=
 <<<QUOTE
 
@@ -1591,7 +1606,11 @@ QUOTE;
   // Creates an SQL assignment expression for entering this field
   // into a database.
   function SQLForm() {
-    return "`{$this->id}` = " . $this->SQLValue();
+    if ($this->calculation) {
+      return NULL;
+    } else {
+      return "`{$this->id}` = " . $this->SQLValue();
+    }
   }
   
   function __toString() {
@@ -1617,6 +1636,9 @@ QUOTE;
 
   // Create an SQL expression that will fetch the field's canonical value
   function SQLField() {
+    if ($this->calculation) {
+      return "{$this->calculation} AS `{$this->id}`";
+    }
     return "`{$this->id}`";
   }
 
