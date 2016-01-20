@@ -67,6 +67,96 @@ class FileFormField extends PatternFormField {
     $this->maxsize = $options['maxsize'];
   }
 
+  function HTMLFormElement() {
+    global $debugging;
+    $valid = (! empty($this->value)) && $this->isvalid($this->value);
+    if ($debugging > 1) {
+      echo "<pre>valid: {$valid}; value: {$this->value}; path: {$this->path}</pre>";
+    }
+    $element = "";
+    // get all the attributes we would normally give the input field
+    $additional = $this->additionalInputAttributes();
+    $form = $this->form;
+    $formname = $form->name;
+    // Higlight incorrect values
+    $class = ($this->form->validate && (! $this->valid)) ? ' class="file invalid"' : ' class="file"';
+    if ($valid) {
+      // See http://www.quirksmode.org/dom/inputfile.html
+      // As modified by ptw:
+      // Depending on whether we are cropping or not, we overlay the image
+      // with a transparent file input button that auto-submits, or create 
+      // an off screen file input
+      {
+        $element .= <<<QUOTE
+
+            <div{$class}>
+QUOTE;
+      }
+      // Here is the file
+      $element .= $this->HTMLValue();
+      {
+        $element .= <<<QUOTE
+
+            </div>
+QUOTE;
+      }
+    } // End valid
+    {
+      $element .= <<<QUOTE
+      
+          <!-- Off-screen input for when cropping or not valid -->
+          <input
+            name="{$this->input}" id="{$this->id}" type="{$this->type}"{$additional} value="{$this->value}"
+            onchange="document.getElementById('${formname}').submit()"
+            style="position: absolute; left: -9999px;"
+          />
+QUOTE;
+    }      
+    $element .= <<<QUOTE
+
+        <div class="buttons">
+QUOTE;
+    $label = $valid ? "Replace File" : "Choose File";
+    // We use a label for the file input around a normal button to trigger the
+    // file input and still auto-submit without IE setting off an alarm
+    // Finally we have to kludge around IE only passing clicks to labels that
+    // contain text, not images...
+    $element .= <<<QUOTE
+
+          <!-- styleable replace/choose button -->
+          <!-- using label to intecept click and send it to the file input element -->
+          <!-- so we don't trigger security alerts on IE -->
+          <!-- also required for Chrome, so we just use this hack for everyone -->
+          <label for="{$this->id}" id="{$this->id}_label">
+            <div style="position: relative; overflow: hidden;">
+              <div style="position: relative; z-index: 1;">
+                <input type="button" id="{$this->id}_button" value="{$label}" />
+              </div>
+              <div
+                  style="
+                    position: absolute;
+                    top: 0px;
+                    left: 0px;
+                    margin: 0;
+                    border: none;
+                    padding: 0;
+                    -moz-opacity:0 ;
+                    filter:alpha(opacity: 0);
+                    opacity: 0;
+                    z-index: 2;
+                    font-size: 50px;
+                    cursor: default;
+                  "
+                >
+                {$label}
+              </div>
+            </div>
+          </label>
+        </div>
+QUOTE;
+    return $element;
+  }
+
   function HTMLTableColumn() {
     $element =
 <<<QUOTE
@@ -180,7 +270,8 @@ QUOTE;
     global $debugging;
     $uploading = $this->uploading($source);
     if ($debugging > 2) {
-      echo "<pre>uploading: {$uploading} </pre>";
+      $ul = $uploading ? 'true':'false';
+      echo "<pre>uploading: {$ul} </pre>";
     }
     return ($uploading || parent::isPresent($source));
   }
