@@ -203,6 +203,11 @@ class Form {
     $optional = $fieldspec->optional;
     $options = $fieldspec->options;
     
+    // User may want value of special fields, but they are effecively calculations
+    if ($this->isSpecialField($id)) {
+      $options['calculation'] = "`{$id}`";
+    }
+    
     $namemap = array("email", "password", "number", "choice", "state", "region", "zip", "postal", "country", "phone", "cell", "birth", "dob", "date", "daytime", "time", "year", "file", "image", "picture");
     if ($type == null) {
       foreach ($namemap as $n) {
@@ -318,7 +323,12 @@ class Form {
         return new FormField($name, $description, $optional, $options);
     }
   }
-
+  
+  function isSpecialField($id) {
+    return (($id == $this->idname) ||
+      ($id == $this->createdname) ||
+      ($id == $this->modifiedname));
+  }
 
   function autoAddFields($include=null, $omit= null) {
     global $debugging;
@@ -345,9 +355,7 @@ class Form {
         if ($debugging > 1) {
           echo "<pre>existing: {$f}<pre>";
         }
-      } else if (($f->id == $this->idname) ||
-                 ($f->id == $this->createdname) ||
-                 ($f->id == $this->modifiedname)) {
+      } else if ($this->isSpecialField($f->id)) {
         // Don't add any of the special database fields
         if ($debugging > 1) {
           echo "<pre>special: {$f}<pre>";
