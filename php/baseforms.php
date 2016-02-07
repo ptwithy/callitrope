@@ -325,9 +325,9 @@ class Form {
   }
   
   function isSpecialField($id) {
-    return (($id == $this->idname) ||
-      ($id == $this->createdname) ||
-      ($id == $this->modifiedname));
+    return ((isset($this->idname)?($id == $this->idname):false) ||
+      (isset($this->createdname)?($id == $this->createdname):false) ||
+      (isset($this->modifiedname)?($id == $this->modifiedname):false));
   }
 
   function autoAddFields($include=null, $omit= null) {
