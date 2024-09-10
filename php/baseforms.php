@@ -181,10 +181,11 @@ class Form {
   // Ordering is important
   var $sqlTypeMap = array (
     'text' => 'area'
-    // This is how mysql represents boolean
-    ,'tinyint(1)' => 'boolean'
     ,'bool' => 'boolean'
     ,'int' => 'number'
+    // This is how mysql represents boolean
+    // MUST COME SECOND or stristr("int") will match it
+    ,'tinyint(1)' => 'boolean'
     ,'decimal' => 'number'
     // SQL date fields should require full year
     ,'date' => 'birthdate'
