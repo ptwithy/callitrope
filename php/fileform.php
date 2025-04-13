@@ -51,7 +51,7 @@ class FileFormField extends PatternFormField {
   // will appear to the right of the form
   // @param directory:String (optional) Name of the directory files
   // should be uploaded to
-  function FileFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     $defaultoptions = array(
       'type' => 'file'
       ,'title' => 'file'
@@ -62,7 +62,7 @@ class FileFormField extends PatternFormField {
       ,'maxsize' => 8388608
     );
     $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::PatternFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
     $this->directory = $options['directory'];
     $this->maxsize = $options['maxsize'];
   }
@@ -393,7 +393,7 @@ class ImageFormField extends FileFormField {
   var $info;
   var $crop;
   
-  function ImageFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     $defaultoptions = array(
       'title' => 'image'
       ,'placeholder' => 'name.png'

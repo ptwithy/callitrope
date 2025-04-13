@@ -81,7 +81,7 @@ class FieldSpec {
   var $optional;
   var $options;
   
-  function FieldSpec($name, $description, $type, $optional, $options) {
+  function __construct($name, $description, $type, $optional, $options) {
     $this->name = $name;
     $this->description = $description;
     $this->type = $type;
@@ -119,7 +119,7 @@ function optField($name, $description=null, $type=null, $options=null) {
 ///
 // Create a computed field
 //
-function calcField($name, $description=null, $type=null, $calculation, $options=null) {
+function calcField($name, $description, $type, $calculation, $options=null) {
   // Computed field must be read-only
   $override = array('readonly' => true, 'calculation' => $calculation);
   $options = $options ? array_merge($options, $override) : $override;
@@ -210,7 +210,7 @@ class Form {
     }
     
     $namemap = array("email", "password", "number", "choice", "state", "region", "zip", "postal", "country", "phone", "cell", "birth", "dob", "date", "daytime", "time", "year", "file", "image", "picture");
-    if ($type == null) {
+    if ($type == null && $name !== null) {
       foreach ($namemap as $n) {
         if (stristr($name, $n)) {
           $type = $n;
@@ -221,21 +221,23 @@ class Form {
     
     // Compute id from name and instance
     if ($type === null) {
-      $e = $this->choicesForField($id);
-      if (is_array($e)) {
-        if ($debugging > 2) {
-          echo "<pre>{$id} choices => " . print_r($e) . "<pre>";
-        }
-        if (array_key_exists(0, $e)) {
-          $type = "checkbox";
-        } elseif (in_array("", $e)) {
-          $type = "menu";
-        } else {
-          $type = "radio";
-        }
-      }
+    	if ($id !== null) {
+				$e = $this->choicesForField($id);
+				if (is_array($e)) {
+					if ($debugging > 2) {
+						echo "<pre>{$id} choices => " . print_r($e) . "<pre>";
+					}
+					if (array_key_exists(0, $e)) {
+						$type = "checkbox";
+					} elseif (in_array("", $e)) {
+						$type = "menu";
+					} else {
+						$type = "radio";
+					}
+				}
+			}
       if ($type === null) {
-        if (array_key_exists($id, $this->columns)) {
+        if ($id !== null && array_key_exists($id, $this->columns)) {
           $desc = $this->columns[$id];
           $sqltype = $desc->Type;
           foreach ($this->sqlTypeMap as $s => $t) {
@@ -246,7 +248,7 @@ class Form {
           }
         } else {
           if ($debugging) {
-            trigger_error("Unable to determine field type for {$id}");
+            throw new ErrorException("Unable to determine field type for {$id} {$description}");
           }
         }
       }
@@ -404,7 +406,7 @@ class Form {
   // get
   // @param $usedivs:boolean (optional, default `false`) Whether to use
   // divs instead of table elements for layout
-  function Form ($name, $action="", $method="post", $usedivs=false) {
+  function __construct($name, $action="", $method="post", $usedivs=false) {
     $this->name = $name;
     $this->action = empty($action) ? $_SERVER['PHP_SELF'] : $action;
     $this->method = $method;
@@ -886,8 +888,8 @@ QUOTE;
 // Deprecated:  All forms now support multiple sections
 //
 class MultisectionForm extends Form {
-  function MultisectionForm($name, $action="", $method="post", $usedivs=false) {
-    parent::Form($name, $action, $method, $usedivs);
+  function __construct($name, $action="", $method="post", $usedivs=false) {
+    parent::__construct($name, $action, $method, $usedivs);
   }
 }
 
@@ -905,14 +907,14 @@ class DatabaseForm extends Form {
   var $createdname;
   var $modifiedname;
   
-  function DatabaseForm($database, $table, $options=null) {
+  function __construct($database, $table, $options=null) {
     global $debugging;
-    $this->database = SQLConnect($database);     
-    $this->table = $table;
     // default options
     $defaultoptions = array('name' => $table, 'action' => "", 'method' => "post", 'usedivs' => false, 'idname' => NULL, 'createdname' => NULL, 'modifiedname' => NULL);
     $options = $options ? array_merge($defaultoptions, $options) : $defaultoptions; 
-    parent::Form($options['name'], $options['action'], $options['method'], $options['usedivs']);
+    parent::__construct($options['name'], $options['action'], $options['method'], $options['usedivs']);
+    $this->database = SQLConnect($database);     
+    $this->table = $table;
     $this->idname = $options['idname'];
     $this->createdname = $options['createdname'];
     $this->modifiedname = $options['modifiedname'];
@@ -1242,7 +1244,7 @@ class FormField {
   // @param optional:Boolean (optional) True if the field is not
   // required
   // @param options:Array (optional) Additional options
-  function FormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -1679,7 +1681,7 @@ QUOTE;
 //
 class EmailFormField extends FormField {
 
-  function EmailFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $html5;
     // default options
     $defaultoptions = array(
@@ -1692,7 +1694,7 @@ class EmailFormField extends FormField {
       ,'maxlength' => 254
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::FormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function isvalid($value) {
@@ -1736,7 +1738,7 @@ class SimpleNumberFormField extends FormField {
   // required
   // @param annotation:String (optional) Additional description that
   // will appear to the right of the form
-  function SimpleNumberFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $mobile;
     $title = "number";
     if (isset($options['min']) && isset($options['max'])) {
@@ -1754,7 +1756,7 @@ class SimpleNumberFormField extends FormField {
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
 
-    parent::FormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
     $this->min = $options['min'];
     $this->max = $options['max'];
     $this->step = $options['step'];
@@ -1808,7 +1810,7 @@ class SimpleNumberFormField extends FormField {
 ///
 // Back-compatibility
 class NumberFormField extends SimpleNumberFormField {
-  function NumberFormField ($name, $description, $min=null, $max=null, $step=null, $optional=false, $options=NULL) {
+  function __construct($name, $description, $min=null, $max=null, $step=null, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -1819,7 +1821,7 @@ class NumberFormField extends SimpleNumberFormField {
       ,'min' => $min
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleNumberFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 }
 
@@ -1831,7 +1833,7 @@ abstract class PatternFormField extends FormField {
   // The pattern that you have to match 
   var $pattern;
 
-  function PatternFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -1839,7 +1841,7 @@ abstract class PatternFormField extends FormField {
       ,'pattern' => NULL
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::FormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
     $this->pattern = $options['pattern'];
   }
 
@@ -1871,7 +1873,7 @@ abstract class PatternFormField extends FormField {
 //
 class PasswordFormField extends PatternFormField {
 
-  function PasswordFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -1884,7 +1886,7 @@ class PasswordFormField extends PatternFormField {
       ,'placeholder' => "10 To 64 letters, numbers or symbols"
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::PatternFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
   
   // Ditto for in an error message
@@ -1900,7 +1902,7 @@ class PasswordFormField extends PatternFormField {
 //
 class StateFormField extends PatternFormField {
 
-  function StateFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -1911,7 +1913,7 @@ class StateFormField extends PatternFormField {
       ,'placeholder' => "ST"
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::PatternFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function canonical ($value) {
@@ -1929,7 +1931,7 @@ class StateFormField extends PatternFormField {
 //
 class OblastFormField extends FormField {
 
-  function OblastFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -1938,7 +1940,7 @@ class OblastFormField extends FormField {
       ,'placeholder' => "ST"
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::FormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
 }
@@ -1947,7 +1949,7 @@ class OblastFormField extends FormField {
 ///
 // A FormField that is a 2-letter Country abbreviation
 class CountryFormField extends StateFormField {
-  function CountryFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -1958,7 +1960,7 @@ class CountryFormField extends StateFormField {
       ,'placeholder' => "CC"
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::StateFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   // For this particular field, we heuristicate before we validate
@@ -2010,7 +2012,7 @@ class CountryFormField extends StateFormField {
 //
 class ZIPFormField extends PatternFormField {
 
-  function ZIPFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $mobile;
     // default options
     $defaultoptions = array(
@@ -2024,7 +2026,7 @@ class ZIPFormField extends PatternFormField {
       ,'placeholder' => "01234-5678"
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::PatternFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function canonical ($value) {
@@ -2063,7 +2065,7 @@ class ZIPFormField extends PatternFormField {
 //
 class PostalCodeFormField extends FormField {
 
-  function PostalCodeFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
       'annotation' => is_string($options) ? $options : ''
@@ -2075,7 +2077,7 @@ class PostalCodeFormField extends FormField {
     // Can't really do any validation on postal codes, they are too random!
     // We can't know if the postal code is all numeric or not
     // Hence simple text field, rather than pattern
-    parent::FormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 }
 
@@ -2089,7 +2091,7 @@ class PhoneFormField extends PatternFormField {
   var $internationalPlaceholder = "+1 123 456 7890";
   var $isInternational = false;
 
-  function PhoneFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $html5;
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -2102,7 +2104,7 @@ class PhoneFormField extends PatternFormField {
       ,'placeholder' => $this->usPlaceholder
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::PatternFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function isvalid ($value) {
@@ -2138,7 +2140,7 @@ class PhoneFormField extends PatternFormField {
 //
 class InternationalPhoneFormField extends PhoneFormField {
 
-  function InternationalPhoneFormField($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $html5;
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -2147,7 +2149,7 @@ class InternationalPhoneFormField extends PhoneFormField {
       ,'placeholder' => $this->internationalPlaceholder
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::PhoneFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function canonical ($value) {
@@ -2173,7 +2175,7 @@ class YearFormField extends PatternFormField {
   var $LocalPattern = "/^((?:[0-9]{2,2})?[0-9]{2,2})$/";
   var $year;
 
-  function YearFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $mobile;
     $this->ISO = $mobile;
     $defaultoptions = array(
@@ -2187,7 +2189,7 @@ class YearFormField extends PatternFormField {
       ,'placeholder' => date("Y")
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::PatternFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function isvalid ($value) {
@@ -2249,7 +2251,7 @@ class DateFormField extends PatternFormField {
   var $month;
   var $day;
 
-  function DateFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $mobile;
     $this->ISO = $mobile;
     $defaultoptions = array(
@@ -2263,7 +2265,7 @@ class DateFormField extends PatternFormField {
       ,'placeholder' => $this->ISO ? date("Y-m-d") : date("m/d/y")
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::PatternFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function isvalid ($value) {
@@ -2325,7 +2327,7 @@ class DateFormField extends PatternFormField {
 //
 class BirthdateFormField extends DateFormField {
 
-  function BirthdateFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $mobile;
     $this->ISO = $mobile;
     $defaultoptions = array(
@@ -2336,7 +2338,7 @@ class BirthdateFormField extends DateFormField {
       ,'placeholder' => $this->ISO ? date("Y-m-d") : date("m/d/Y")
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::DateFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
     // Override the default
     // Require 4-digit year
     $this->LocalPattern = "/^([01]?[0-9])[-\/ ]([0-3]?[0-9])[-\/ ]((?:[0-9]{2,2})?[0-9]{4,4})$/";
@@ -2356,7 +2358,7 @@ class DaytimeFormField extends PatternFormField {
   var $hour;
   var $minute;
   
-  function DaytimeFormField ($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $mobile;
     $this->ISO = $mobile;
     $defaultoptions = array(
@@ -2369,7 +2371,7 @@ class DaytimeFormField extends PatternFormField {
       ,'placeholder' => $this->ISO ? date("H:i") : date("g:i a")
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::PatternFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function isvalid ($value) {
@@ -2435,8 +2437,8 @@ class DaytimeFormField extends PatternFormField {
 //
 class TextAreaFormField extends FormField {
 
-  function TextAreaFormField($name, $description, $optional=false, $options=NULL) {
-    parent::FormField($name, $description, $optional, $options);
+  function __construct($name, $description, $optional=false, $options=NULL) {
+    parent::__construct($name, $description, $optional, $options);
   }
 
   // Create the HTML form element for inputting this field
@@ -2483,7 +2485,7 @@ class ChoiceItem {
   // @param $name:String The name of the item (stored in database)
   // @param $description:String The description of the item (displayed
   // on the form).  Optional, defaults to name.
-  function ChoiceItem($name, $description=null) {
+  function __construct($name, $description=null) {
     $this->name = $name;
     $this->description = ($description ? $description : $name);
   }
@@ -2536,7 +2538,7 @@ class SimpleChoiceFormField extends FormField {
   var $choices;
   var $invalidChoice;
 
-  function SimpleChoiceFormField($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -2545,7 +2547,7 @@ class SimpleChoiceFormField extends FormField {
       ,'invalidChoice' => MD5('not_bloody_likely')
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::FormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
     $this->choices = $options['choices'];
     $this->invalidChoice = $options['invalidChoice'];
   }
@@ -2673,7 +2675,7 @@ class SimpleChoiceFormField extends FormField {
 // Back-compatibility
 //
 class ChoiceFormField extends SimpleChoiceFormField {
-  function ChoiceFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+  function __construct($name, $description, $choices=NULL, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -2681,7 +2683,7 @@ class ChoiceFormField extends SimpleChoiceFormField {
       ,'choices' => $choices
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleChoiceFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 }
 
@@ -2691,7 +2693,7 @@ class ChoiceFormField extends SimpleChoiceFormField {
 // @param choices:array An array of the possible choices
 class SimpleRadioFormField extends SimpleChoiceFormField {
 
-  function SimpleRadioFormField($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -2699,7 +2701,7 @@ class SimpleRadioFormField extends SimpleChoiceFormField {
       ,'type' => 'radio'
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleChoiceFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function HTMLFormElement() {
@@ -2762,7 +2764,7 @@ QUOTE;
 // Back-compatibility
 //
 class RadioFormField extends SimpleRadioFormField {
-  function RadioFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+  function __construct($name, $description, $choices=NULL, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -2770,7 +2772,7 @@ class RadioFormField extends SimpleRadioFormField {
       ,'choices' => $choices
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleRadioFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 }
 
@@ -2783,8 +2785,8 @@ class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
   // which will start with 1 rather than 0
   var $offset = 0;
 
-  function SimpleMultipleChoiceFormField($name, $description, $optional=false, $options=NULL) {
-    parent::SimpleChoiceFormField($name, $description, $optional, $options);
+  function __construct($name, $description, $optional=false, $options=NULL) {
+    parent::__construct($name, $description, $optional, $options);
   }
   
   function setForm($form) {
@@ -2930,7 +2932,7 @@ class SimpleMultipleChoiceFormField extends SimpleChoiceFormField {
 // Back-compatibility
 //
 class MultipleChoiceFormField extends SimpleMultipleChoiceFormField {
-  function MultipleChoiceFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+  function __construct($name, $description, $choices=NULL, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -2938,7 +2940,7 @@ class MultipleChoiceFormField extends SimpleMultipleChoiceFormField {
       ,'choices' => $choices
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleMultipleChoiceFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 }
 
@@ -2948,8 +2950,8 @@ class MultipleChoiceFormField extends SimpleMultipleChoiceFormField {
 // @param choices:array An array of the possible choices
 class SimpleCheckboxFormField extends SimpleMultipleChoiceFormField {
 
-  function SimpleCheckboxFormField($name, $description, $optional=false, $options=NULL) {
-    parent::SimpleMultipleChoiceFormField($name, $description, $optional, $options);
+  function __construct($name, $description, $optional=false, $options=NULL) {
+    parent::__construct($name, $description, $optional, $options);
   }
 
   function HTMLFormElement() {
@@ -3012,7 +3014,7 @@ QUOTE;
 // Represented in mySQL as tinyint(1)
 class SimpleBooleanFormField extends SimpleCheckboxFormField {
 
-  function SimpleBooleanFormField($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -3020,7 +3022,7 @@ class SimpleBooleanFormField extends SimpleCheckboxFormField {
       ,'choices' => array(1 => 'Yes')
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleCheckboxFormField($name, $description, true, $options);
+    parent::__construct($name, $description, true, $options);
   }
   
   function setForm($form) {
@@ -3044,6 +3046,22 @@ class SimpleBooleanFormField extends SimpleCheckboxFormField {
 }
 
 ///
+// Back-compatibility
+//
+class CheckboxFormField extends SimpleCheckboxFormField {
+  function __construct($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+    // default options
+    $defaultoptions = array(
+      // Back-compatibility, $options used to be $annotation
+      'annotation' => is_string($options) ? $options : ''
+      ,'choices' => $choices
+    );
+    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
+    parent::__construct($name, $description, $optional, $options);
+  }
+}
+
+///
 // A FormField that will be represented as a checkbox, which is either
 // checked or not
 //
@@ -3052,8 +3070,8 @@ class SimpleBooleanFormField extends SimpleCheckboxFormField {
 //
 class SingleCheckboxFormField extends CheckboxFormField {
 
-  function SingleCheckboxFormField($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
-    parent::CheckboxFormField($name, $description, $choices, $optional, $annotation, $instance);
+  function __construct($name, $description, $choices=null, $optional=false, $annotation="", $instance=NULL) {
+    parent::__construct($name, $description, $choices, $optional, $annotation, $instance);
   }
 }
 
@@ -3065,24 +3083,8 @@ class SingleCheckboxFormField extends CheckboxFormField {
 //
 class RequiredCheckboxFormField extends CheckboxFormField {
 
-  function RequiredCheckboxFormField($name, $description, $choices=null, $annotation="", $instance=NULL) {
-    parent::CheckboxFormField($name, $description, $choices, false, $annotation, $instance);
-  }
-}
-
-///
-// Back-compatibility
-//
-class CheckboxFormField extends SimpleCheckboxFormField {
-  function CheckboxFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
-    // default options
-    $defaultoptions = array(
-      // Back-compatibility, $options used to be $annotation
-      'annotation' => is_string($options) ? $options : ''
-      ,'choices' => $choices
-    );
-    $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleCheckboxFormField($name, $description, $optional, $options);
+  function __construct($name, $description, $choices=null, $annotation="", $instance=NULL) {
+    parent::__construct($name, $description, $choices, false, $annotation, $instance);
   }
 }
 
@@ -3093,7 +3095,7 @@ class CheckboxFormField extends SimpleCheckboxFormField {
 class SimpleMenuFormField extends SimpleChoiceFormField {
   var $selectlabel;
   
-  function SimpleMenuFormField($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -3102,7 +3104,7 @@ class SimpleMenuFormField extends SimpleChoiceFormField {
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
     $this->selectlabel = $options['selectlabel'];
-    parent::SimpleChoiceFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   // Writes out a <select> tag with a fake first option that
@@ -3153,7 +3155,7 @@ QUOTE;
 // Back-compatibility
 //
 class MenuFormField extends SimpleMenuFormField {
-  function MenuFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+  function __construct($name, $description, $choices=NULL, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -3161,7 +3163,7 @@ class MenuFormField extends SimpleMenuFormField {
       ,'choices' => $choices
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleMenuFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 }
 
@@ -3170,7 +3172,7 @@ class MenuFormField extends SimpleMenuFormField {
 // intervals.
 class SimpleTimeFormField extends SimpleMenuFormField {
 
-  function SimpleTimeFormField($name, $description, $optional=false, $options=NULL) {
+  function __construct($name, $description, $optional=false, $options=NULL) {
     global $html5;
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -3200,7 +3202,7 @@ class SimpleTimeFormField extends SimpleMenuFormField {
       ,'choices' => $choices
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleMenuFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 
   // Output 24-hour SQL time
@@ -3221,7 +3223,7 @@ class SimpleTimeFormField extends SimpleMenuFormField {
 // Back-compatibility
 //
 class TimeFormField extends SimpleTimeFormField {
-  function TimeFormField($name, $description,$start, $end, $interval, $optional=false, $options=NULL) {
+  function __construct($name, $description,$start, $end, $interval, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -3231,7 +3233,7 @@ class TimeFormField extends SimpleTimeFormField {
       ,'interval' => $interval
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleTimeFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 }
 
@@ -3243,7 +3245,7 @@ class TimeFormField extends SimpleTimeFormField {
 class MenuItem {
   var $name;
 
-  function MenuItem($name) {
+  function __construct($name) {
     $this->name = $name;
   }
 
@@ -3264,8 +3266,8 @@ class MenuItem {
 //
 class SimpleMenuItemFormField extends SimpleMenuFormField {
 
-  function SimpleMenuItemFormField($name, $description, $optional=false, $options=NULL) {
-    parent::SimpleMenuFormField($name, $description, $optional, $options);
+  function __construct($name, $description, $optional=false, $options=NULL) {
+    parent::__construct($name, $description, $optional, $options);
   }
 
   // Override to make sure they don't choose a separator
@@ -3341,7 +3343,7 @@ QUOTE;
 // Back-compatibility
 //
 class MenuItemFormField extends SimpleMenuItemFormField {
-  function MenuItemFormField($name, $description, $choices=NULL, $optional=false, $options=NULL) {
+  function __construct($name, $description, $choices=NULL, $optional=false, $options=NULL) {
     // default options
     $defaultoptions = array(
       // Back-compatibility, $options used to be $annotation
@@ -3349,7 +3351,7 @@ class MenuItemFormField extends SimpleMenuItemFormField {
       ,'choices' => $choices
     );
     $options = is_array($options) ? array_merge($defaultoptions, $options) : $defaultoptions;
-    parent::SimpleMenuItemFormField($name, $description, $optional, $options);
+    parent::__construct($name, $description, $optional, $options);
   }
 }
 
